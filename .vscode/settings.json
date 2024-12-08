@@ -3,5 +3,6 @@
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "ms-vscode.cpptools"
   },
-  "cmake.ignoreCMakeListsMissing": true
+  "cmake.ignoreCMakeListsMissing": true,
+  "C_Cpp.default.compilerPath": "/bin/gcc"
 }
