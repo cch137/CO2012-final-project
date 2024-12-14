@@ -1,7 +1,13 @@
 {
+  "[c]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.tabSize": 2
+  },
   "[cpp]": {
     "editor.formatOnSave": true,
-    "editor.defaultFormatter": "ms-vscode.cpptools"
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.tabSize": 2
   },
   "cmake.ignoreCMakeListsMissing": true,
   "C_Cpp.default.compilerPath": "/bin/gcc"
