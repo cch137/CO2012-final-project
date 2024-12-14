@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <ctype.h>
 
 #include "utils.h"
@@ -68,6 +68,69 @@ char *dbutil_strdup(const char *source)
     EXIT_ON_MEMORY_ERROR();
   strcpy(dup, source);
   return dup;
+}
+
+bool dbutil_match_keys(const char *source, const char *pattern)
+{
+  const char *src_ptr = source;
+  const char *pat_ptr = pattern;
+  const char *last_star = NULL;
+  const char *star_match_pos = source;
+
+  while (*src_ptr)
+  {
+    if (*pat_ptr == '\\' && *(pat_ptr + 1) != '\0')
+    {
+      pat_ptr++;
+      if (*pat_ptr == *src_ptr)
+      {
+        pat_ptr++;
+        src_ptr++;
+      }
+      else if (last_star)
+      {
+        pat_ptr = last_star + 1;
+        src_ptr = ++star_match_pos;
+      }
+      else
+      {
+        return false;
+      }
+    }
+    else if (*pat_ptr == '*')
+    {
+      last_star = pat_ptr++;
+      star_match_pos = src_ptr;
+    }
+    else if (*pat_ptr == '?')
+    {
+      pat_ptr++;
+      if (*src_ptr == '\0')
+        return false;
+      src_ptr++;
+    }
+    else if (*pat_ptr == *src_ptr)
+    {
+      pat_ptr++;
+      src_ptr++;
+    }
+    else if (last_star)
+    {
+      pat_ptr = last_star + 1;
+      src_ptr = ++star_match_pos;
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  while (*pat_ptr == '*')
+  {
+    pat_ptr++;
+  }
+
+  return *pat_ptr == '\0';
 }
 
 void _exit_on_memory_error(const char *filename, int line, const char *funcname)
