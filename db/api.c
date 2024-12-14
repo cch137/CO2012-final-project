@@ -1,15 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
 
 #include "utils.h"
 #include "interaction.h"
+#include "doubly_linked_list.h"
 #include "core.h"
 #include "api.h"
 
 // Parses command string into DBRequest structure
 static DBRequest *parse_command(const char *command);
+
+static bool reply_is_error(const DBReply *reply);
 
 bool server_is_running()
 {
@@ -38,6 +42,38 @@ void dbapi_start_server()
   core_lock();
   db_start();
   core_unlock();
+}
+
+void dbapi_start_terminal_client()
+{
+  char *command_buffer = NULL;
+  DBRequest *request = NULL;
+  DBRequest *reply = NULL;
+
+  dbapi_start_server();
+  printf("Welcome to cch137's database!\n");
+  printf("Please use commands to interact with the database.\n");
+
+  while (server_is_running())
+  {
+    printf("> ");
+    command_buffer = input_string();
+    if (!command_buffer)
+      continue;
+    request = parse_command(command_buffer);
+    free_reply(print_reply(dbapi_request_sync(request)));
+    free_request(request);
+    free(command_buffer);
+  }
+
+  printf("Goodbye! The database has been shut down.\n");
+}
+
+void dbapi_run_command(const char *command)
+{
+  DBRequest *request = parse_command(command);
+  free_reply(dbapi_request_sync(request));
+  free_request(request);
 }
 
 DBReply *dbapi_request_async(DBRequest *request)
@@ -75,38 +111,6 @@ DBReply *dbapi_await_reply(DBReply *reply)
 
   return reply;
 };
-
-void dbapi_start_terminal_client()
-{
-  char *command_buffer = NULL;
-  DBRequest *request = NULL;
-  DBRequest *reply = NULL;
-
-  dbapi_start_server();
-  printf("Welcome to cch137's database!\n");
-  printf("Please use commands to interact with the database.\n");
-
-  while (server_is_running())
-  {
-    printf("> ");
-    command_buffer = input_string();
-    if (!command_buffer)
-      continue;
-    request = parse_command(command_buffer);
-    free_reply(print_reply(dbapi_request_sync(request)));
-    free_request(request);
-    free(command_buffer);
-  }
-
-  printf("Goodbye! The database has been shut down.\n");
-}
-
-void dbapi_run_command(const char *command)
-{
-  DBRequest *request = parse_command(command);
-  free_reply(dbapi_request_sync(request));
-  free_request(request);
-}
 
 static DBRequest *parse_command(const char *command)
 {
@@ -248,4 +252,285 @@ static DBRequest *parse_command(const char *command)
 
   free(command_copy);
   return request;
+}
+
+static bool reply_is_error(const DBReply *reply)
+{
+  return reply->type == DB_TYPE_ERROR;
+}
+
+char *dbapi_get(const char *key)
+{
+  DBRequest *request = create_request(DB_GET);
+  add_arg_string(request, key);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return NULL;
+  }
+  char *result = reply->value.string;
+  reply->value.string = NULL;
+  free_reply(reply);
+  return result;
+}
+
+bool dbapi_set(const char *key, const char *value)
+{
+  DBRequest *request = create_request(DB_SET);
+  add_arg_string(request, key);
+  add_arg_string(request, value);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return false;
+  }
+  bool result = reply->value.boolean;
+  free_reply(reply);
+  return result;
+}
+
+bool dbapi_del(const char *key)
+{
+  DBRequest *request = create_request(DB_DEL);
+  add_arg_string(request, key);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return false;
+  }
+  bool result = reply->value.boolean;
+  free_reply(reply);
+  return result;
+}
+
+db_size_t dbapi_lpush(const char *key, const char *value)
+{
+  DBRequest *request = create_request(DB_LPUSH);
+  add_arg_string(request, key);
+  add_arg_string(request, value);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_size_t result = reply->value.size;
+  free_reply(reply);
+  return result;
+}
+
+db_size_t dbapi_lpush_n(const char *key, ...)
+{
+  DBRequest *request = create_request(DB_LPUSH);
+  va_list args;
+  va_start(args, key);
+  add_arg_string(request, key);
+  while (true)
+  {
+    const char *value = va_arg(args, const char *);
+    if (value == NULL)
+      break;
+    add_arg_string(request, value);
+  }
+  va_end(args);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_size_t result = reply->value.size;
+  free_reply(reply);
+  return result;
+}
+
+char *dbapi_lpop(const char *key)
+{
+  DBRequest *request = create_request(DB_LPOP);
+  add_arg_string(request, key);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return NULL;
+  }
+  char *result = reply->value.string;
+  reply->value.string = NULL;
+  free_reply(reply);
+  return result;
+}
+
+db_size_t dbapi_rpush(const char *key, const char *value)
+{
+  DBRequest *request = create_request(DB_RPUSH);
+  add_arg_string(request, key);
+  add_arg_string(request, value);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_size_t result = reply->value.size;
+  free_reply(reply);
+  return result;
+}
+
+db_size_t dbapi_rpush_n(const char *key, ...)
+{
+  DBRequest *request = create_request(DB_RPUSH);
+  va_list args;
+  va_start(args, key);
+  add_arg_string(request, key);
+  while (true)
+  {
+    const char *value = va_arg(args, const char *);
+    if (value == NULL)
+      break;
+    add_arg_string(request, value);
+  }
+  va_end(args);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_size_t result = reply->value.size;
+  free_reply(reply);
+  return result;
+}
+
+char *dbapi_rpop(const char *key)
+{
+  DBRequest *request = create_request(DB_RPOP);
+  add_arg_string(request, key);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return NULL;
+  }
+  char *result = reply->value.string;
+  reply->value.string = NULL;
+  free_reply(reply);
+  return result;
+}
+
+db_size_t dbapi_llen(const char *key)
+{
+  DBRequest *request = create_request(DB_LLEN);
+  add_arg_string(request, key);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_size_t result = reply->value.size;
+  free_reply(reply);
+  return result;
+}
+
+DLList *dbapi_lrange(const char *key, const db_size_t start, const db_size_t end)
+{
+  DBRequest *request = create_request(DB_LRANGE);
+  add_arg_string(request, key);
+  add_arg_uint(request, start);
+  add_arg_uint(request, end);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return NULL;
+  }
+  DLList *result = reply->value.list;
+  reply->value.list = NULL;
+  free_reply(reply);
+  return result;
+}
+
+DLList *dbapi_keys()
+{
+  DBRequest *request = create_request(DB_KEYS);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return NULL;
+  }
+  DLList *result = reply->value.list;
+  reply->value.list = NULL;
+  free_reply(reply);
+  return result;
+}
+
+bool dbapi_shutdown()
+{
+  DBRequest *request = create_request(DB_SHUTDOWN);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return false;
+  }
+  bool result = reply->value.boolean;
+  free_reply(reply);
+  return result;
+}
+
+bool dbapi_save()
+{
+  DBRequest *request = create_request(DB_SAVE);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return false;
+  }
+  bool result = reply->value.boolean;
+  free_reply(reply);
+  return result;
+}
+
+bool dbapi_flushall()
+{
+  DBRequest *request = create_request(DB_FLUSHALL);
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return false;
+  }
+  bool result = reply->value.boolean;
+  free_reply(reply);
+  return result;
+}
+
+void dbapi_free(char *s)
+{
+  free(s);
+}
+
+void dbapi_free_list(DLList *list)
+{
+  free_list(list);
 }

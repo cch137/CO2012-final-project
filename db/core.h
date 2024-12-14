@@ -20,6 +20,7 @@ int core_lock();
 int core_unlock();
 bool core_trylock_is_success();
 
+// Starts the database and sets db_seed to a random number
 void db_start();
 
 bool db_is_running();
