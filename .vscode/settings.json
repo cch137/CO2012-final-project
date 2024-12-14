@@ -2,12 +2,16 @@
   "[c]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "ms-vscode.cpptools",
-    "editor.tabSize": 2
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false
   },
   "[cpp]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "ms-vscode.cpptools",
-    "editor.tabSize": 2
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false
   },
   "cmake.ignoreCMakeListsMissing": true,
   "C_Cpp.default.compilerPath": "/bin/gcc"
