@@ -9,12 +9,12 @@
 
 int core_lock();
 int core_unlock();
-bool core_trylock_is_success();
+db_bool_t core_trylock_is_success();
 
 // Starts the database and sets db_seed to a random number
 void db_start();
 
-bool db_is_running();
+db_bool_t db_is_running();
 
 void db_config_hash_seed(db_uint_t _hash_seed);
 

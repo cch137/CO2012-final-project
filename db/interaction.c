@@ -92,7 +92,7 @@ DBReply *print_reply(DBReply *reply)
     printf("(error) %s\n", reply->data->value.string ? reply->data->value.string : "");
     break;
   case DB_TYPE_BOOL:
-    printf("(bool) %s\n", reply->data->value.bool_value ? "true" : "false");
+    printf("(db_bool_t) %s\n", reply->data->value.bool_value ? "true" : "false");
     break;
   case DB_TYPE_INT:
     printf("(int) %lu\n", reply->data->value.uint_value);

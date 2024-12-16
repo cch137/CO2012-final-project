@@ -28,12 +28,12 @@ static int core_worker();
 static const char const *core_retrieve_string(const char *key);
 
 // Retrieves a list by key;
-static DBList *core_retrieve_list(const char *key, const bool create_new_if_not_found);
+static DBList *core_retrieve_list(const char *key, const db_bool_t create_new_if_not_found);
 
 // File path for database persistence
 static char *persistence_filepath = NULL;
 
-static bool is_running = false;
+static db_bool_t is_running = false;
 static DBHash *core_ht = NULL;
 static mtx_t *lock = NULL;
 static thrd_t core_worker_thread = -1;
@@ -64,7 +64,7 @@ int core_unlock()
   return mtx_unlock(lock);
 }
 
-bool core_trylock_is_success()
+db_bool_t core_trylock_is_success()
 {
   core_lock_init();
   return mtx_trylock(lock) == thrd_success;
@@ -158,7 +158,7 @@ void db_start()
   thrd_create(&core_worker_thread, core_worker, NULL);
 }
 
-bool db_is_running()
+db_bool_t db_is_running()
 {
   return is_running;
 }
@@ -329,7 +329,7 @@ static const char const *core_retrieve_string(const char *key)
   return NULL;
 }
 
-static DBList *core_retrieve_list(const char *key, const bool create_new_if_not_found)
+static DBList *core_retrieve_list(const char *key, const db_bool_t create_new_if_not_found)
 {
   if (!key)
     return NULL;

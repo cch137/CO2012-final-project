@@ -5,43 +5,43 @@
 static DBObj *_dbobj_create(db_type_t type);
 static void *_dbobj_extract_pointer(DBObj *obj);
 
-bool dbobj_is_null(DBObj *obj)
+db_bool_t dbobj_is_null(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_NULL;
 };
-bool dbobj_is_error(DBObj *obj)
+db_bool_t dbobj_is_error(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_ERROR;
 };
-bool dbobj_is_bool(DBObj *obj)
+db_bool_t dbobj_is_bool(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_BOOL;
 };
-bool dbobj_is_int(DBObj *obj)
+db_bool_t dbobj_is_int(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_INT;
 };
-bool dbobj_is_uint(DBObj *obj)
+db_bool_t dbobj_is_uint(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_UINT;
 };
-bool dbobj_is_double(DBObj *obj)
+db_bool_t dbobj_is_double(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_DOUBLE;
 };
-bool dbobj_is_string(DBObj *obj)
+db_bool_t dbobj_is_string(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_STRING;
 };
-bool dbobj_is_list(DBObj *obj)
+db_bool_t dbobj_is_list(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_LIST;
 };
-bool dbobj_is_zset(DBObj *obj)
+db_bool_t dbobj_is_zset(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_ZSET;
 };
-bool dbobj_is_hash(DBObj *obj)
+db_bool_t dbobj_is_hash(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_HASH;
 };
@@ -58,7 +58,7 @@ DBObj *dbobj_create_error(char *message)
   return obj;
 }
 
-DBObj *dbobj_create_bool(bool value)
+DBObj *dbobj_create_bool(db_bool_t value)
 {
   DBObj *obj = _dbobj_create(DB_TYPE_BOOL);
   obj->value.bool_value = value;
@@ -154,9 +154,9 @@ char *dbobj_extract_error(DBObj *obj)
 {
   return dbobj_is_error(obj) ? _dbobj_extract_pointer(obj) : NULL;
 }
-bool dbobj_extract_bool(DBObj *obj)
+db_bool_t dbobj_extract_bool(DBObj *obj)
 {
-  bool value = obj->value.bool_value;
+  db_bool_t value = obj->value.bool_value;
   free_dbobj(obj);
   return value;
 }

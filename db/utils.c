@@ -70,7 +70,7 @@ char *dbutil_strdup(const char *source)
   return dup;
 }
 
-bool dbutil_match_keys(const char *source, const char *pattern)
+db_bool_t dbutil_match_keys(const char *source, const char *pattern)
 {
   const char *src_ptr = source;
   const char *pat_ptr = pattern;

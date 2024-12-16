@@ -11,7 +11,7 @@ typedef struct
 {
   const char *source;
   const char *pattern;
-  bool expected;
+  db_bool_t expected;
 } TestCase;
 
 void test_dbutil_match_keys()
@@ -58,7 +58,7 @@ void test_dbutil_match_keys()
 
   for (size_t i = 0; i < test_count; ++i)
   {
-    bool result = dbutil_match_keys(test_cases[i].source, test_cases[i].pattern);
+    db_bool_t result = dbutil_match_keys(test_cases[i].source, test_cases[i].pattern);
     printf("[%s] Source: \"%s\", Pattern: \"%s\" (Expected: %s)\n",
            (result == test_cases[i].expected) ? RESULT_PASS : RESULT_FAIL,
            test_cases[i].source, test_cases[i].pattern,

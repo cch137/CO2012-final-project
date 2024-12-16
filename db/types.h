@@ -46,6 +46,7 @@ typedef enum db_action_t
   DB_SHUTDOWN
 } db_action_t;
 
+typedef bool db_bool_t;
 typedef int32_t db_int_t;
 typedef uint32_t db_uint_t;
 typedef double db_double_t;
@@ -102,7 +103,7 @@ typedef struct DBObj
   db_type_t type;
   union DBObjValue
   {
-    bool bool_value;
+    db_bool_t bool_value;
     db_int_t int_value;
     db_uint_t uint_value;
     db_double_t double_value;
@@ -123,7 +124,7 @@ typedef struct DBRequest
 
 typedef struct DBReply
 {
-  bool done;
+  db_bool_t done;
   DBObj *data;
 } DBReply;
 

@@ -13,12 +13,12 @@
 // Parses command string into DBRequest structure
 static DBRequest *parse_command(const char *command);
 
-static bool reply_is_error(const DBReply *reply);
+static db_bool_t reply_is_error(const DBReply *reply);
 
-bool server_is_running()
+db_bool_t server_is_running()
 {
   core_lock();
-  bool _is_running = db_is_running();
+  db_bool_t _is_running = db_is_running();
   core_unlock();
   return _is_running;
 }
@@ -250,7 +250,7 @@ static DBRequest *parse_command(const char *command)
   return request;
 }
 
-static bool reply_is_error(const DBReply *reply)
+static db_bool_t reply_is_error(const DBReply *reply)
 {
   return reply && reply->data && reply->data->type == DB_TYPE_ERROR;
 }
@@ -272,7 +272,7 @@ char *dbapi_get(const char *key)
   return result;
 }
 
-bool dbapi_set(const char *key, const char *value)
+db_bool_t dbapi_set(const char *key, const char *value)
 {
   DBRequest *request = create_request(DB_SET);
   add_request_arg(request, dbobj_create_string_with_dup(key));
@@ -284,7 +284,7 @@ bool dbapi_set(const char *key, const char *value)
     free_reply(reply);
     return false;
   }
-  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
+  db_bool_t result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }
@@ -305,7 +305,7 @@ db_uint_t dbapi_del(const char *key)
   return result;
 }
 
-bool dbapi_rename(const char *old_key, const char *new_key)
+db_bool_t dbapi_rename(const char *old_key, const char *new_key)
 {
   DBRequest *request = create_request(DB_RENAME);
   add_request_arg(request, dbobj_create_string_with_dup(old_key));
@@ -317,7 +317,7 @@ bool dbapi_rename(const char *old_key, const char *new_key)
     free_reply(reply);
     return false;
   }
-  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
+  db_bool_t result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }
@@ -493,7 +493,7 @@ DBList *dbapi_keys()
   return result;
 }
 
-bool dbapi_shutdown()
+db_bool_t dbapi_shutdown()
 {
   DBRequest *request = create_request(DB_SHUTDOWN);
   DBReply *reply = dbapi_request_sync(request);
@@ -505,7 +505,7 @@ bool dbapi_shutdown()
   }
 }
 
-bool dbapi_save()
+db_bool_t dbapi_save()
 {
   DBRequest *request = create_request(DB_SAVE);
   DBReply *reply = dbapi_request_sync(request);
@@ -515,12 +515,12 @@ bool dbapi_save()
     free_reply(reply);
     return false;
   }
-  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
+  db_bool_t result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }
 
-bool dbapi_flushall()
+db_bool_t dbapi_flushall()
 {
   DBRequest *request = create_request(DB_FLUSHALL);
   DBReply *reply = dbapi_request_sync(request);
@@ -530,7 +530,7 @@ bool dbapi_flushall()
     free_reply(reply);
     return false;
   }
-  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
+  db_bool_t result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }

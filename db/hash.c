@@ -6,7 +6,7 @@
 
 db_uint_t hash_seed = 0;
 
-static inline bool ht_is_rehashing(DBHash *ht)
+static inline db_bool_t ht_is_rehashing(DBHash *ht)
 {
   return ht->rehashing_index != -1;
 }
@@ -18,7 +18,7 @@ static db_uint_t murmurhash2(const void *key, db_uint_t len);
 static void _ht_maintenance(DBHash *ht);
 // Checks if rehashing is needed and performs a rehash step if required
 // Returns true if additional rehash steps are required
-static bool _ht_rehash_step(DBHash *ht);
+static db_bool_t _ht_rehash_step(DBHash *ht);
 
 static void _ht_resize_table(DBHash *ht, int ht_index, db_uint_t new_size);
 
@@ -77,7 +77,7 @@ static void _ht_maintenance(DBHash *ht)
   }
 }
 
-static bool _ht_rehash_step(DBHash *ht)
+static db_bool_t _ht_rehash_step(DBHash *ht)
 {
   if (!ht_is_rehashing(ht))
     return false; // Not rehashing
