@@ -133,6 +133,17 @@ bool dbutil_match_keys(const char *source, const char *pattern)
   return *pat_ptr == '\0';
 }
 
+void debug_print(const char *s)
+{
+  printf("%s", s);
+}
+
+void _exit_on_error(const char *message, const char *filename, int line, const char *funcname)
+{
+  printf("Error: %s in '%s' function at %s:%d\n", message, funcname, filename, line);
+  exit(1);
+}
+
 void _exit_on_memory_error(const char *filename, int line, const char *funcname)
 {
   printf("Error: Memory allocation failed in '%s' function at %s:%d\n", funcname, filename, line);

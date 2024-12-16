@@ -2,18 +2,46 @@
 #include <stdlib.h>
 
 #include "utils.h"
-#include "doubly_linked_list.h"
+#include "obj.h"
+#include "list.h"
 #include "interaction.h"
-
-static DBArg *add_arg(DBRequest *request, db_type_t type);
 
 DBRequest *create_request(db_action_t action)
 {
-  DBRequest *request = (DBRequest *)calloc(1, sizeof(DBRequest));
+  DBRequest *request = (DBRequest *)malloc(sizeof(DBRequest));
   if (!request)
     EXIT_ON_MEMORY_ERROR();
   request->action = action;
+  request->args = NULL;
   return request;
+};
+
+DBReply *create_reply()
+{
+  DBReply *reply = (DBReply *)malloc(sizeof(DBReply));
+  if (!reply)
+    EXIT_ON_MEMORY_ERROR();
+  reply->done = false;
+  reply->data = NULL;
+  return reply;
+};
+
+void add_request_arg(DBRequest *request, DBObj *arg)
+{
+  if (!request)
+    return;
+  if (!request->args)
+    request->args = create_dblist();
+  DBListNode *node = create_dblistnode(arg);
+  if (arg)
+  {
+    join_dblistnodes(request->args->tail, node);
+    if (!request->args->head)
+      request->args->head = node;
+    request->args->tail = node;
+    request->args->length++;
+    rpush;
+  }
 };
 
 DBRequest *reset_request(DBRequest *request, db_action_t action)
@@ -21,15 +49,11 @@ DBRequest *reset_request(DBRequest *request, db_action_t action)
   if (!request)
     return NULL;
   request->action = action;
-  DBArg *arg = request->arg_head;
-  while (arg)
+  if (request->args)
   {
-    request->arg_head = arg->next;
-    free(arg);
-    arg = request->arg_head;
+    free_dblist(request->args);
+    request->args = NULL;
   }
-  request->arg_head = NULL;
-  request->arg_tail = NULL;
   return request;
 };
 
@@ -37,15 +61,8 @@ void free_request(DBRequest *request)
 {
   if (!request)
     return;
-  DBArg *arg = request->arg_head;
-  while (arg)
-  {
-    request->arg_head = arg->next;
-    if (arg->type == DB_TYPE_STRING)
-      free(arg->value.string);
-    free(arg);
-    arg = request->arg_head;
-  }
+
+  free_dblist(request->args);
   free(request);
 };
 
@@ -54,20 +71,7 @@ void free_reply(DBReply *reply)
   if (!reply)
     return;
 
-  switch (reply->type)
-  {
-  case DB_TYPE_ERROR:
-  case DB_TYPE_STRING:
-    free(reply->value.string);
-    break;
-  case DB_TYPE_LIST:
-    free_list(reply->value.list);
-    break;
-  case DB_TYPE_UINT:
-  default:
-    break;
-  }
-
+  free_dbobj(reply->data);
   free(reply);
 }
 
@@ -79,34 +83,40 @@ DBReply *print_reply(DBReply *reply)
     return reply;
   }
 
-  switch (reply->type)
+  switch (reply->data->type)
   {
   case DB_TYPE_NULL:
     printf("(nil)\n");
     break;
   case DB_TYPE_ERROR:
-    printf("(error) %s\n", reply->value.string ? reply->value.string : "");
-    break;
-  case DB_TYPE_STRING:
-    printf("%s\n", reply->value.string ? reply->value.string : "");
-    break;
-  case DB_TYPE_UINT:
-    printf("(uint) %lu\n", reply->value.size);
-    break;
-  case DB_TYPE_LIST:
-    printf("(list) count: %u\n", reply->value.list ? reply->value.list->length : 0);
-    if (!reply->value.list)
-      break;
-    db_size_t i = 0;
-    DLNode *node = reply->value.list->head;
-    while (node)
-      printf("  %u) %s\n", ++i, node->data), node = node->next;
+    printf("(error) %s\n", reply->data->value.string ? reply->data->value.string : "");
     break;
   case DB_TYPE_BOOL:
-    printf("(bool) %s\n", reply->ok ? "true" : "false");
+    printf("(bool) %s\n", reply->data->value.bool_value ? "true" : "false");
+    break;
+  case DB_TYPE_INT:
+    printf("(int) %lu\n", reply->data->value.uint_value);
+    break;
+  case DB_TYPE_UINT:
+    printf("(uint) %lu\n", reply->data->value.uint_value);
+    break;
+  case DB_TYPE_STRING:
+    printf("%s\n", reply->data->value.string ? reply->data->value.string : "");
+    break;
+  case DB_TYPE_LIST:
+    printf("(list) count: %u\n", reply->data->value.list ? reply->data->value.list->length : 0);
+    if (!reply->data->value.list)
+    {
+      printf("Unexpected empty pointer\n");
+      break;
+    }
+    db_uint_t i = 0;
+    DBListNode *node = reply->data->value.list->head;
+    while (node)
+      printf("  %u) %s\n", ++i, node->data->value.string), node = node->next;
     break;
   default:
-    printf("(unknown) type=%lu\n", reply->type);
+    printf("(unknown) type=%lu\n", reply->data->type);
     break;
   }
 
@@ -117,55 +127,79 @@ DBReply *reply_error(DBReply *reply, const char *message)
 {
   if (!reply)
     return NULL;
-  reply->ok = false;
-  reply->type = DB_TYPE_ERROR;
-  reply->value.string = dbutil_strdup(message);
+  if (reply->data)
+    free_dbobj(reply->data);
+  reply->data = dbobj_create_error(dbutil_strdup(message));
   return reply;
 }
 
-static DBArg *add_arg(DBRequest *request, db_type_t type)
+DBReply *reply_data(DBReply *reply, DBObj *data)
 {
-  if (!request)
+  if (!reply)
     return NULL;
-  DBArg *arg = (DBArg *)calloc(1, sizeof(DBArg));
-  if (!arg)
-    EXIT_ON_MEMORY_ERROR();
-  arg->type = type;
-  if (!request->arg_head)
-    request->arg_head = arg;
-  if (request->arg_tail)
-    request->arg_tail->next = arg;
-  request->arg_tail = arg;
-  return arg;
-};
+  if (reply->data)
+    free_dbobj(reply->data);
+  reply->data = data;
+  return reply;
+}
 
-DBArg *add_arg_uint(DBRequest *request, db_size_t value)
+char *get_string_arg(DBListNode *curr_node)
 {
-  if (!request)
+  if (!curr_node || !curr_node->data || !dbobj_is_string(curr_node->data))
     return NULL;
-  DBArg *arg = add_arg(request, DB_TYPE_UINT);
-  arg->value.size = value;
-  return arg;
-};
+  return curr_node->data->value.string;
+}
 
-DBArg *add_arg_string(DBRequest *request, const char *value)
+db_uint_t get_uint_arg(DBListNode *curr_node)
 {
-  if (!request)
-    return NULL;
-  DBArg *arg = add_arg(request, DB_TYPE_STRING);
-  arg->value.string = dbutil_strdup(value);
-  return arg;
-};
+  if (!curr_node || !curr_node->data)
+    return 0;
+  if (dbobj_is_string(curr_node->data))
+    arg_string_to_uint(curr_node->data);
+  if (dbobj_is_uint(curr_node->data))
+    return curr_node->data->value.uint_value;
+  return 0;
+}
 
-DBArg *arg_string_to_uint(DBArg *arg)
+db_int_t get_int_arg(DBListNode *curr_node)
 {
-  if (arg && arg->type == DB_TYPE_STRING)
+  if (!curr_node || !curr_node->data)
+    return 0;
+  if (dbobj_is_string(curr_node->data))
+    arg_string_to_int(curr_node->data);
+  if (dbobj_is_int(curr_node->data))
+    return curr_node->data->value.int_value;
+  return 0;
+}
+
+DBObj *arg_string_to_uint(DBObj *obj)
+{
+  if (!obj || obj->type != DB_TYPE_STRING)
+    return obj;
+
+  char *s = obj->value.string;
+  if (s)
   {
-    arg->type = DB_TYPE_UINT;
-    char *s = arg->value.string;
-    if (s)
-      arg->value.size = strtoul(s, NULL, 10),
-      free(s);
+    obj->type = DB_TYPE_UINT;
+    obj->value.uint_value = (db_uint_t)strtoul(s, NULL, 10),
+    free(s);
   }
-  return arg;
+
+  return obj;
+}
+
+DBObj *arg_string_to_int(DBObj *obj)
+{
+  if (!obj || obj->type != DB_TYPE_STRING)
+    return obj;
+
+  char *s = obj->value.string;
+  if (s)
+  {
+    obj->type = DB_TYPE_INT;
+    obj->value.int_value = (db_int_t)strtol(s, NULL, 10),
+    free(s);
+  }
+
+  return obj;
 }

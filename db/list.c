@@ -1,24 +1,26 @@
 #include "utils.h"
-#include "doubly_linked_list.h"
-#include <stdio.h>
+#include "obj.h"
+#include "list.h"
 
-static inline void join_list_node(DLNode *left_node, DLNode *right_node);
-static inline void break_list_node(DLNode *left_node, DLNode *right_node);
-
-DLNode *create_list_node(char *data)
+DBListNode *create_dblistnode(DBObj *data)
 {
-  DLNode *node = malloc(sizeof(DLNode));
+  DBListNode *node = malloc(sizeof(DBListNode));
   if (!node)
     EXIT_ON_MEMORY_ERROR();
-  node->data = dbutil_strdup(data);
+  node->data = data;
   node->prev = NULL;
   node->next = NULL;
   return node;
 }
 
-DLList *create_list()
+DBListNode *create_dblistnode_with_string(char *data)
 {
-  DLList *list = malloc(sizeof(DLList));
+  return create_dblistnode(dbobj_create_string(dbutil_strdup(data)));
+}
+
+DBList *create_dblist()
+{
+  DBList *list = malloc(sizeof(DBList));
   if (!list)
     EXIT_ON_MEMORY_ERROR();
   list->head = NULL;
@@ -27,34 +29,55 @@ DLList *create_list()
   return list;
 }
 
-void free_list_node(DLNode *node)
+void free_dblistnode(DBListNode *node)
 {
   if (!node)
     return;
-  break_list_node(node, node->next);
-  break_list_node(node->prev, node);
-  free(node->data);
+  break_dblistnodes(node, node->next);
+  break_dblistnodes(node->prev, node);
+  free_dbobj(node->data);
   free(node);
 }
 
-void free_list(DLList *list)
+char *extract_dblistnode_string(DBListNode *node)
+{
+  if (!node)
+    return NULL;
+
+  char *data = dbobj_extract_string(node->data);
+  node->data = NULL;
+  free_dblistnode(node);
+
+  return data;
+}
+
+void clear_dblist(DBList *list)
 {
   if (!list)
     return;
 
-  DLNode *curr = list->head;
+  DBListNode *curr = list->head;
 
   while (curr)
   {
     list->head = curr->next;
-    free_list_node(curr);
+    free_dblistnode(curr);
     curr = list->head;
   }
 
+  list->tail = NULL;
+  list->length = 0;
+}
+
+void free_dblist(DBList *list)
+{
+  if (!list)
+    return;
+  clear_dblist(list);
   free(list);
 }
 
-static inline void join_list_node(DLNode *left_node, DLNode *right_node)
+void join_dblistnodes(DBListNode *left_node, DBListNode *right_node)
 {
   if (left_node)
     left_node->next = right_node;
@@ -62,7 +85,7 @@ static inline void join_list_node(DLNode *left_node, DLNode *right_node)
     right_node->prev = left_node;
 }
 
-static inline void break_list_node(DLNode *left_node, DLNode *right_node)
+void break_dblistnodes(DBListNode *left_node, DBListNode *right_node)
 {
   if (left_node)
     left_node->next = NULL;
@@ -70,14 +93,14 @@ static inline void break_list_node(DLNode *left_node, DLNode *right_node)
     right_node->prev = NULL;
 }
 
-db_size_t lpush(DLList *list, DLNode *node)
+db_uint_t lpush(DBList *list, DBListNode *node)
 {
   if (!list)
     return 0;
 
   while (node)
   {
-    join_list_node(node, list->head);
+    join_dblistnodes(node, list->head);
     list->head = node;
     list->length++;
     node = node->prev;
@@ -96,15 +119,15 @@ db_size_t lpush(DLList *list, DLNode *node)
   return list->length;
 }
 
-DLNode *lpop(DLList *list)
+DBListNode *lpop(DBList *list)
 {
   if (!list || !list->head)
     return NULL;
 
-  DLNode *removed_node = list->head;
+  DBListNode *removed_node = list->head;
 
   list->head = removed_node->next;
-  break_list_node(removed_node, list->head);
+  break_dblistnodes(removed_node, list->head);
   --list->length;
 
   if (!list->head)
@@ -115,13 +138,13 @@ DLNode *lpop(DLList *list)
   return removed_node;
 }
 
-DLList *lpop_n(DLList *list, db_size_t count)
+DBList *lpop_n(DBList *list, db_uint_t count)
 {
   if (!list || !list->head || !count)
     return NULL;
 
-  DLNode *curr = NULL;
-  DLList *reply_list = create_list();
+  DBListNode *curr = NULL;
+  DBList *reply_list = create_dblist();
 
   while (count--)
   {
@@ -139,14 +162,14 @@ DLList *lpop_n(DLList *list, db_size_t count)
   return reply_list;
 }
 
-db_size_t rpush(DLList *list, DLNode *node)
+db_uint_t rpush(DBList *list, DBListNode *node)
 {
   if (!list || !node)
     return 0;
 
   while (node)
   {
-    join_list_node(list->tail, node);
+    join_dblistnodes(list->tail, node);
     list->tail = node;
     list->length++;
     node = node->next;
@@ -160,15 +183,15 @@ db_size_t rpush(DLList *list, DLNode *node)
   return list->length;
 }
 
-DLNode *rpop(DLList *list)
+DBListNode *rpop(DBList *list)
 {
   if (!list || !list->tail)
     return NULL;
 
-  DLNode *removed_node = list->tail;
+  DBListNode *removed_node = list->tail;
 
   list->tail = removed_node->prev;
-  break_list_node(list->tail, removed_node);
+  break_dblistnodes(list->tail, removed_node);
   --list->length;
 
   if (!list->tail)
@@ -179,13 +202,13 @@ DLNode *rpop(DLList *list)
   return removed_node;
 }
 
-DLList *rpop_n(DLList *list, db_size_t count)
+DBList *rpop_n(DBList *list, db_uint_t count)
 {
   if (!list || !list->tail || !count)
     return NULL;
 
-  DLNode *curr = NULL;
-  DLList *reply_list = create_list();
+  DBListNode *curr = NULL;
+  DBList *reply_list = create_dblist();
 
   while (count--)
   {
@@ -203,9 +226,9 @@ DLList *rpop_n(DLList *list, db_size_t count)
   return reply_list;
 }
 
-DLList *lrange(const DLList const *list, db_size_t start, db_size_t stop)
+DBList *lrange(const DBList const *list, db_uint_t start, db_uint_t stop)
 {
-  DLList *reply_list = create_list();
+  DBList *reply_list = create_dblist();
 
   if (!list)
   {
@@ -224,10 +247,10 @@ DLList *lrange(const DLList const *list, db_size_t start, db_size_t stop)
 
   // The new node must be initialized to NULL,
   // as it will be assigned to the reply list regardless of whether it has been created.
-  DLNode *new_node = NULL;
-  DLNode *last_new_node = NULL;
-  DLNode *curr_node;
-  db_size_t index;
+  DBListNode *new_node = NULL;
+  DBListNode *last_new_node = NULL;
+  DBListNode *curr_node;
+  db_uint_t index;
 
   if (start > list->length - 1 - stop)
   {
@@ -240,8 +263,8 @@ DLList *lrange(const DLList const *list, db_size_t start, db_size_t stop)
     }
     while (index >= start && curr_node)
     {
-      new_node = create_list_node(curr_node->data);
-      join_list_node(new_node, last_new_node);
+      new_node = create_dblistnode_with_string(curr_node->data->value.string);
+      join_dblistnodes(new_node, last_new_node);
       last_new_node = new_node;
       if (!reply_list->tail)
         reply_list->tail = new_node;
@@ -261,8 +284,8 @@ DLList *lrange(const DLList const *list, db_size_t start, db_size_t stop)
     }
     while (index <= stop && curr_node)
     {
-      new_node = create_list_node(curr_node->data);
-      join_list_node(last_new_node, new_node);
+      new_node = create_dblistnode_with_string(curr_node->data->value.string);
+      join_dblistnodes(last_new_node, new_node);
       last_new_node = new_node;
       if (!reply_list->head)
         reply_list->head = new_node;

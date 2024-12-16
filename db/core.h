@@ -3,15 +3,6 @@
 
 #include "types.h"
 
-// Initial size of the hash table
-#define INITIAL_TABLE_SIZE 16
-
-// Load factor threshold for expanding the hash table
-#define LOAD_FACTOR_EXPAND 0.7
-
-// Load factor threshold for shrinking the hash table
-#define LOAD_FACTOR_SHRINK 0.1
-
 #define DEFAULT_PERSISTENCE_FILE "db.json"
 
 #define NANOSECONDS_PER_SECOND 1000000000L
@@ -25,14 +16,11 @@ void db_start();
 
 bool db_is_running();
 
-void db_config_hash_seed(db_size_t _hash_seed);
+void db_config_hash_seed(db_uint_t _hash_seed);
 
 void db_config_persistence_filepath(const char *_persistence_filepath);
 
 DBReply *db_handle_request(DBRequest *request);
-
-// Returns the memory usage of the current database dataset
-void db_get_dataset_memory_usage(DBRequest *request, DBReply *reply);
 
 // Retrieves a string from the database by key; returns NULL if not found or type mismatch
 void db_get(DBRequest *request, DBReply *reply);

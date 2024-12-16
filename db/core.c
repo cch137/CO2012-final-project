@@ -5,7 +5,8 @@
 
 #include "deps/cJSON.h"
 #include "utils.h"
-#include "doubly_linked_list.h"
+#include "list.h"
+#include "hash.h"
 #include "interaction.h"
 #include "core.h"
 
@@ -17,93 +18,23 @@ typedef struct DBTask
   struct DBTask *next;
 } DBTask;
 
-typedef struct CoreHTEntry
-{
-  // Key for the entry
-  char *key;
-  // Type of the stored value (e.g., string or list)
-  db_type_t type;
-  // Value for the entry
-  union DBValue
-  {
-    char *string;
-    DLList *list;
-  } value;
-  // Pointer to the next entry in case of a hash collision
-  struct CoreHTEntry *next;
-} CoreHTEntry;
-
-typedef struct CoreHT
-{
-  // Number of slots in the hash table
-  db_size_t size;
-  // Current number of entries in the hash table
-  db_size_t count;
-  // Array of entries
-  CoreHTEntry **entries;
-} CoreHT;
-
 static inline void core_lock_init();
 
+static DBListNode *get_arg_head_node(DBRequest *request);
+
 static int core_worker();
-
-// Computes the MurmurHash2 hash of a key
-static db_size_t murmurhash2(const void *key, db_size_t len);
-
-// Executed during each low-level operation and periodic task to maintain the hash table size
-static void core_maintenance();
-
-// Checks if rehashing is needed and performs a rehash step if required
-// Returns true if additional rehash steps are required
-static bool core_rehash_step();
-
-// Creates a new hash table with the specified size
-static CoreHT *core_create_table(db_size_t size);
-
-// Frees the memory allocated for a hash table
-static void core_free_table(CoreHT *table);
-
-// Creates a new entry with the specified key and type; assigns value directly
-static CoreHTEntry *create_entry(char *key, db_type_t type, void *value);
-
-// Frees the memory allocated for a hash table entry
-static void core_free_entry(CoreHTEntry *entry);
-
-static void core_set_entry_value(CoreHTEntry *entry, db_type_t type, void *value);
-
-// Retrieves an entry by key; returns NULL if not found
-static CoreHTEntry *core_get_entry(const char *key);
-
-// Adds an entry to the hash table
-static CoreHTEntry *core_add_entry(CoreHTEntry *entry);
-
-// Removes an entry by key; returns NULL if not found
-static CoreHTEntry *core_remove_entry(const char *key);
 
 // Retrieves a string by key;
 static const char const *core_retrieve_string(const char *key);
 
 // Retrieves a list by key;
-static DLList *core_retrieve_list(const char *key, const bool create_new_if_not_found);
-
-// Seed for the hash function, affecting hash distribution
-static db_size_t hash_seed = 0;
+static DBList *core_retrieve_list(const char *key, const bool create_new_if_not_found);
 
 // File path for database persistence
 static char *persistence_filepath = NULL;
 
-// tables[0] is the main table, tables[1] is the rehash table
-// During rehashing, entries are first searched and deleted from tables[1], then from tables[0].
-// New entries are only written to tables[1] during rehashing.
-// After rehashing is complete, tables[0] is freed and tables[1] is moved to the main table.
-static CoreHT *tables[2] = {NULL, NULL};
-
-// -1 indicates no rehashing; otherwise, it's the current rehashing index
-// The occurrence of rehashing is determined by periodic tasks; when rehashing starts, rehashing_index will be the last index of the table size
-// Rehashing will be handled during periodic task execution and during db_insert_entry and db_get_entry.
-static db_int_t rehashing_index = -1;
-
 static bool is_running = false;
+static DBHash *core_ht = NULL;
 static mtx_t *lock = NULL;
 static thrd_t core_worker_thread = -1;
 
@@ -139,12 +70,24 @@ bool core_trylock_is_success()
   return mtx_trylock(lock) == thrd_success;
 }
 
+static DBListNode *get_arg_head_node(DBRequest *request)
+{
+  if (!request || !request->args)
+    return NULL;
+  return request->args->head;
+}
+
 void db_start()
 {
   if (is_running)
     return;
 
   is_running = true;
+
+  if (core_ht)
+    ht_reset(core_ht);
+  else
+    core_ht = ht_create_context();
 
   db_flushall(NULL, NULL);
 
@@ -168,7 +111,7 @@ void db_start()
     fclose(file);
 
     char *key = NULL;
-    DLList *list;
+    DBList *list;
     cJSON *cjson_cursor = cJSON_Parse(buffer);
     cJSON *cjson_array_cursor = NULL;
     free(buffer);
@@ -186,28 +129,26 @@ void db_start()
         continue;
       }
 
-      core_maintenance();
-
       if (cJSON_IsString(cjson_cursor))
       {
-        core_add_entry(create_entry(key, DB_TYPE_STRING, dbutil_strdup(cJSON_GetStringValue(cjson_cursor))));
+        ht_add_entry(core_ht, ht_create_entry(key, DB_TYPE_STRING, dbutil_strdup(cJSON_GetStringValue(cjson_cursor))));
       }
 
       else if (cJSON_IsArray(cjson_cursor))
       {
         cjson_array_cursor = cjson_cursor->child;
 
-        list = create_list();
+        list = create_dblist();
         while (cjson_array_cursor)
         {
           if (cJSON_IsString(cjson_array_cursor))
           {
-            rpush(list, create_list_node(cJSON_GetStringValue(cjson_array_cursor)));
+            rpush(list, create_dblistnode_with_string(cJSON_GetStringValue(cjson_array_cursor)));
           }
 
           cjson_array_cursor = cjson_array_cursor->next;
         }
-        core_add_entry(create_entry(key, DB_TYPE_LIST, list));
+        ht_add_entry(core_ht, ht_create_entry(key, DB_TYPE_LIST, list));
       }
 
       cjson_cursor = cjson_cursor->next;
@@ -222,9 +163,9 @@ bool db_is_running()
   return is_running;
 }
 
-void db_config_hash_seed(db_size_t _hash_seed)
+void db_config_hash_seed(db_uint_t _hash_seed)
 {
-  hash_seed = _hash_seed ? _hash_seed : (db_size_t)time(NULL);
+  hash_seed = _hash_seed ? _hash_seed : (db_uint_t)time(NULL);
 }
 
 void db_config_persistence_filepath(const char *_persistence_filepath)
@@ -235,17 +176,11 @@ void db_config_persistence_filepath(const char *_persistence_filepath)
 
 DBReply *db_handle_request(DBRequest *request)
 {
-  DBReply *reply = (DBReply *)calloc(1, sizeof(DBReply));
-  if (!reply)
-    EXIT_ON_MEMORY_ERROR();
-
-  reply->ok = false;
+  DBReply *reply = create_reply();
 
   if (!is_running)
   {
-    reply->ok = false;
-    reply->type = DB_TYPE_ERROR;
-    reply->value.string = dbutil_strdup(DB_ERR_DB_IS_CLOSED);
+    reply_error(reply, DB_ERR_DB_IS_CLOSED);
     return reply;
   }
 
@@ -277,7 +212,6 @@ static int core_worker()
   clock_t t0;
   DBRequest *request;
   DBReply *reply;
-  DBArg *arg1, *arg2, *arg3;
   // Calculate the sleep increment to reach 1 second over 5 minutes, in nanoseconds.
   const long sleep_increment_ns = NANOSECONDS_PER_SECOND / (5 * 60 * 1000);
   clock_t idle_start_time = 0;
@@ -297,10 +231,8 @@ static int core_worker()
       }
       do
       {
-        core_maintenance();
         request = task_queue_head->request;
         reply = task_queue_head->reply;
-        reply->ok = true;
         switch (request->action)
         {
         case DB_GET:
@@ -339,9 +271,10 @@ static int core_worker()
         case DB_FLUSHALL:
           db_flushall(request, reply);
           break;
-        case DB_INFO_DATASET_MEMORY:
-          db_get_dataset_memory_usage(request, reply);
-          break;
+        // TODO: Returns the memory usage of the current database dataset
+        // case DB_INFO_DATASET_MEMORY:
+        //   db_get_dataset_memory_usage(request, reply);
+        //   break;
         case DB_SAVE:
           db_save(request, reply);
           break;
@@ -349,9 +282,7 @@ static int core_worker()
           db_shutdown(request, reply);
           break;
         default:
-          reply->ok = false;
-          reply->type = DB_TYPE_ERROR;
-          reply->value.string = dbutil_strdup(DB_ERR_UNKNOWN_COMMAND);
+          reply_error(reply, DB_ERR_UNKNOWN_COMMAND);
           break;
         }
         reply->done = true;
@@ -364,7 +295,6 @@ static int core_worker()
     }
     else
     {
-      core_maintenance();
       core_unlock();
       if (!idle_start_time)
       {
@@ -384,379 +314,37 @@ static int core_worker()
   return 0;
 }
 
-static db_size_t murmurhash2(const void *key, db_size_t len)
-{
-  const db_size_t m = 0x5bd1e995;
-  const int r = 24;
-  db_size_t h = hash_seed ^ len;
-
-  const unsigned char *data = (const unsigned char *)key;
-
-  while (len >= 4)
-  {
-    db_size_t k = *(db_size_t *)data;
-    k *= m, k ^= k >> r, k *= m;
-    h *= m, h ^= k;
-    data += 4, len -= 4;
-  }
-
-  switch (len)
-  {
-  case 3:
-    h ^= data[2] << 16;
-  case 2:
-    h ^= data[1] << 8;
-  case 1:
-    h ^= data[0];
-    h *= m;
-  }
-
-  h ^= h >> 13, h *= m, h ^= h >> 15;
-
-  return h;
-}
-
-void db_get_dataset_memory_usage(DBRequest *request, DBReply *reply)
-{
-  size_t size = 2 * sizeof(CoreHT *);
-  CoreHTEntry *entry;
-  DLNode *dllnode;
-
-  for (int j = 0; j < 2; ++j)
-  {
-    if (!tables[j])
-      continue;
-    size += malloc_usable_size(tables[j]);
-    size += malloc_usable_size(tables[j]->entries);
-    for (db_size_t i = 0; i < tables[j]->size; ++i)
-    {
-      entry = tables[j]->entries[i];
-      while (entry)
-      {
-        size += malloc_usable_size(entry);
-        size += malloc_usable_size(entry->key);
-        switch (entry->type)
-        {
-        case DB_TYPE_STRING:
-          size += malloc_usable_size(entry->value.string);
-          break;
-        case DB_TYPE_LIST:
-          size += malloc_usable_size(entry->value.list);
-          dllnode = entry->value.list->head;
-          while (dllnode)
-          {
-            size += malloc_usable_size(dllnode);
-            size += malloc_usable_size(dllnode->data);
-            dllnode = dllnode->next;
-          }
-          break;
-        default:
-          break;
-        }
-        entry = entry->next;
-      }
-    }
-  }
-
-  reply->type = DB_TYPE_UINT;
-  reply->value.size = size;
-}
-
-static void core_maintenance()
-{
-  if (!tables[1])
-  {
-    if (tables[0]->count > LOAD_FACTOR_EXPAND * tables[0]->size)
-    {
-      rehashing_index = tables[0]->size - 1;
-      tables[1] = core_create_table(tables[0]->size * 2);
-    }
-    else if (tables[0]->size > INITIAL_TABLE_SIZE && tables[0]->count < LOAD_FACTOR_SHRINK * tables[0]->size)
-    {
-      rehashing_index = tables[0]->size - 1;
-      tables[1] = core_create_table(tables[0]->size / 2);
-    }
-  }
-  else
-    core_rehash_step();
-}
-
-static bool core_rehash_step()
-{
-  if (!tables[1])
-    return false; // Not rehashing
-
-  // Move entries from tables[0] to tables[1]
-  db_size_t index;
-  CoreHTEntry *curr_entry = tables[0]->entries[rehashing_index];
-  CoreHTEntry *next_entry;
-
-  while (curr_entry)
-  {
-    next_entry = curr_entry->next;
-    index = murmurhash2(curr_entry->key, strlen(curr_entry->key)) % tables[1]->size;
-    curr_entry->next = tables[1]->entries[index];
-    tables[1]->entries[index] = curr_entry;
-    ++tables[1]->count;
-    --tables[0]->count;
-    curr_entry = next_entry;
-  }
-
-  tables[0]->entries[rehashing_index] = NULL;
-  --rehashing_index;
-
-  if (rehashing_index == (int32_t)(-1))
-  {
-    core_free_table(tables[0]);
-    tables[0] = tables[1];
-    tables[1] = NULL; // Clear the rehash table
-    return false;
-  }
-
-  return true;
-}
-
-static CoreHT *core_create_table(db_size_t size)
-{
-  CoreHT *table = (CoreHT *)malloc(sizeof(CoreHT));
-  if (!table)
-    EXIT_ON_MEMORY_ERROR();
-
-  table->size = size;
-  table->count = 0;
-  table->entries = (CoreHTEntry **)calloc(size, sizeof(CoreHTEntry *));
-
-  if (!table->entries)
-    EXIT_ON_MEMORY_ERROR();
-
-  return table;
-}
-
-static void core_free_table(CoreHT *table)
-{
-  if (!table)
-    return;
-  db_size_t i;
-
-  CoreHTEntry *curr_entry, *next_entry;
-  for (i = 0; i < table->size; ++i)
-  {
-    curr_entry = table->entries[i];
-    next_entry = NULL;
-    while (curr_entry)
-    {
-      next_entry = curr_entry->next;
-      core_free_entry(curr_entry);
-      curr_entry = next_entry;
-    }
-  }
-
-  free(table->entries);
-  free(table);
-}
-
-static CoreHTEntry *create_entry(char *key, db_type_t type, void *value)
-{
-  if (!key || !value)
-    return NULL;
-
-  CoreHTEntry *entry = (CoreHTEntry *)malloc(sizeof(CoreHTEntry));
-
-  if (!entry)
-    EXIT_ON_MEMORY_ERROR();
-
-  entry->key = key;
-  entry->next = NULL;
-
-  core_set_entry_value(entry, type, value);
-
-  return entry;
-}
-
-static void core_free_entry(CoreHTEntry *entry)
-{
-  if (!entry)
-    return;
-
-  if (entry->key)
-    free(entry->key);
-
-  core_set_entry_value(entry, DB_TYPE_NULL, NULL);
-
-  free(entry);
-}
-
-static void core_set_entry_value(CoreHTEntry *entry, db_type_t type, void *value)
-{
-  if (!entry)
-    return;
-
-  if (entry->type != type)
-  {
-    switch (entry->type)
-    {
-    case DB_TYPE_STRING:
-      free(entry->value.string);
-      entry->value.string = NULL;
-      break;
-    case DB_TYPE_LIST:
-      free_list(entry->value.list);
-      entry->value.list = NULL;
-      break;
-    default:
-      break;
-    }
-    entry->type = type;
-  }
-
-  if (!value)
-    return;
-
-  switch (type)
-  {
-  case DB_TYPE_STRING:
-    entry->value.string = value;
-    break;
-  case DB_TYPE_LIST:
-    entry->value.list = value;
-    break;
-  default:
-    break;
-  }
-}
-
-static CoreHTEntry *core_get_entry(const char *key)
-{
-  if (!key)
-    return NULL;
-
-  CoreHTEntry *entry;
-
-  if (tables[1])
-  {
-    entry = tables[1]->entries[murmurhash2(key, strlen(key)) % tables[1]->size];
-    while (entry)
-    {
-      if (strcmp(entry->key, key) == 0)
-        return entry;
-      entry = entry->next;
-    }
-  }
-
-  entry = tables[0]->entries[murmurhash2(key, strlen(key)) % tables[0]->size];
-  while (entry)
-  {
-    if (strcmp(entry->key, key) == 0)
-      return entry;
-    entry = entry->next;
-  }
-
-  return NULL;
-}
-
-static CoreHTEntry *core_add_entry(CoreHTEntry *entry)
-{
-  if (!entry)
-    return NULL;
-
-  db_size_t index;
-
-  if (tables[1])
-  {
-    index = murmurhash2(entry->key, strlen(entry->key)) % tables[1]->size;
-    entry->next = tables[1]->entries[index];
-    tables[1]->entries[index] = entry;
-    ++tables[1]->count;
-    return entry;
-  }
-
-  index = murmurhash2(entry->key, strlen(entry->key)) % tables[0]->size;
-  entry->next = tables[0]->entries[index];
-  tables[0]->entries[index] = entry;
-  ++tables[0]->count;
-  return entry;
-}
-
-static CoreHTEntry *core_remove_entry(const char *key)
-{
-  if (!key)
-    return NULL;
-
-  CoreHTEntry *curr_entry, *prev_entry = NULL;
-  db_size_t index;
-
-  if (tables[1])
-  {
-    index = murmurhash2(key, strlen(key)) % tables[1]->size;
-    curr_entry = tables[1]->entries[index];
-    while (curr_entry)
-    {
-      if (strcmp(curr_entry->key, key) == 0)
-      {
-        if (prev_entry)
-          prev_entry->next = curr_entry->next;
-        else
-          tables[1]->entries[index] = curr_entry->next;
-        --tables[1]->count;
-        return curr_entry;
-      }
-      prev_entry = curr_entry;
-      curr_entry = curr_entry->next;
-    }
-  }
-
-  index = murmurhash2(key, strlen(key)) % tables[0]->size;
-  curr_entry = tables[0]->entries[index];
-  prev_entry = NULL;
-  while (curr_entry)
-  {
-    if (strcmp(curr_entry->key, key) == 0)
-    {
-      if (prev_entry)
-        prev_entry->next = curr_entry->next;
-      else
-        tables[0]->entries[index] = curr_entry->next;
-      --tables[0]->count;
-      return curr_entry;
-    }
-    prev_entry = curr_entry;
-    curr_entry = curr_entry->next;
-  }
-
-  return NULL;
-}
-
 static const char const *core_retrieve_string(const char *key)
 {
   if (!key)
     return NULL;
 
-  CoreHTEntry *entry = core_get_entry(key);
+  DBHashEntry *entry = ht_get_entry(core_ht, key);
 
-  if (entry && entry->type == DB_TYPE_STRING)
+  if (entry && entry->data->type == DB_TYPE_STRING)
   {
-    return entry->value.string;
+    return entry->data->value.string;
   }
 
   return NULL;
 }
 
-static DLList *core_retrieve_list(const char *key, const bool create_new_if_not_found)
+static DBList *core_retrieve_list(const char *key, const bool create_new_if_not_found)
 {
   if (!key)
     return NULL;
 
-  CoreHTEntry *entry = core_get_entry(key);
+  DBHashEntry *entry = ht_get_entry(core_ht, key);
 
   if (entry)
   {
-    return entry->type == DB_TYPE_LIST ? entry->value.list : NULL;
+    return entry->data->type == DB_TYPE_LIST ? entry->data->value.list : NULL;
   }
 
   if (create_new_if_not_found)
   {
-    DLList *list = create_list();
-    core_add_entry(create_entry(dbutil_strdup(key), DB_TYPE_LIST, list));
+    DBList *list = create_dblist();
+    ht_add_entry(core_ht, ht_create_entry(dbutil_strdup(key), DB_TYPE_LIST, list));
 
     return list;
   }
@@ -766,63 +354,69 @@ static DLList *core_retrieve_list(const char *key, const bool create_new_if_not_
 
 void db_get(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1)
+  if (!key || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  const char const *value = core_retrieve_string(arg1->value.string);
+  const char const *value = core_retrieve_string(key);
 
   if (value)
   {
     // Return the string value
-    reply->type = DB_TYPE_STRING;
-    reply->value.string = dbutil_strdup(value);
+    reply_data(reply, dbobj_create_string_with_dup(value));
   }
   else
   {
     // Not found
-    reply->type = DB_TYPE_NULL;
+    reply_data(reply, dbobj_create_null());
   }
 }
 
 void db_set(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
-  DBArg *arg2 = arg1 ? arg1->next : NULL;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *value = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1 || !arg2)
+  if (!key || !value || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  CoreHTEntry *entry = core_get_entry(arg1->value.string);
+  DBHashEntry *entry = ht_get_entry(core_ht, key);
 
   if (entry)
-    core_set_entry_value(entry, DB_TYPE_STRING, dbutil_strdup(arg2->value.string));
+    ht_set_entry_value(entry, DB_TYPE_STRING, dbutil_strdup(value));
   else
-    core_add_entry(create_entry(dbutil_strdup(arg1->value.string), DB_TYPE_STRING, dbutil_strdup(arg2->value.string)));
+    ht_add_entry(core_ht, ht_create_entry(dbutil_strdup(key), DB_TYPE_STRING, dbutil_strdup(value)));
 
-  reply->type = DB_TYPE_BOOL;
-  reply->value.boolean = true;
+  reply_data(reply, dbobj_create_string_with_dup(OK));
 }
 
 void db_rename(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
-  DBArg *arg2 = arg1 ? arg1->next : NULL;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *old_key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *new_key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1 || !arg2)
+  if (!old_key || !new_key || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  CoreHTEntry *entry = core_remove_entry(arg1->value.string);
+  DBHashEntry *entry = ht_remove_entry(core_ht, old_key);
 
   if (!entry)
   {
@@ -831,50 +425,54 @@ void db_rename(DBRequest *request, DBReply *reply)
   }
 
   free(entry->key);
-  entry->key = dbutil_strdup(arg2->value.string);
-  core_add_entry(entry);
+  entry->key = dbutil_strdup(new_key);
+  ht_add_entry(core_ht, entry);
 
-  reply->type = DB_TYPE_BOOL;
-  reply->value.boolean = true;
+  reply_data(reply, dbobj_create_string_with_dup(OK));
 }
 
 void db_del(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg = request->arg_head;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg)
+  if (!key)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  CoreHTEntry *entry;
-  db_size_t deleted_count = 0;
+  DBHashEntry *entry;
+  db_uint_t deleted_count = 0;
 
-  while (arg)
+  while (key)
   {
-    entry = core_remove_entry(arg->value.string);
+    entry = ht_remove_entry(core_ht, key);
     if (entry)
-      core_free_entry(entry), ++deleted_count;
-    arg = arg->next;
+      ht_free_entry(entry), ++deleted_count;
+    key = get_string_arg(curr_arg_node);
+    curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
   }
 
-  reply->type = DB_TYPE_UINT;
-  reply->value.size = deleted_count;
+  reply_data(reply, dbobj_create_uint(deleted_count));
 }
 
 void db_lpush(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
-  DBArg *arg2 = arg1 ? arg1->next : NULL;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *member = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1 || !arg2)
+  if (!key || !member)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  DLList *list = core_retrieve_list(arg1->value.string, true);
+  DBList *list = core_retrieve_list(key, true);
 
   if (!list)
   {
@@ -882,61 +480,63 @@ void db_lpush(DBRequest *request, DBReply *reply)
     return;
   }
 
-  while (arg2)
+  while (member)
   {
-    lpush(list, create_list_node(arg2->value.string));
-    arg2 = arg2->next;
+    lpush(list, create_dblistnode_with_string(member));
+    member = get_string_arg(curr_arg_node);
+    curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
   }
 
-  reply->type = DB_TYPE_UINT;
-  reply->value.size = list->length;
+  reply_data(reply, dbobj_create_uint(list->length));
 }
 
 void db_lpop(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
-  DBArg *arg2 = arg1 ? arg1->next ? arg_string_to_uint(arg1->next) : add_arg_uint(request, 1) : NULL;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  db_uint_t count = curr_arg_node ? get_uint_arg(curr_arg_node) : 1;
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1 || !arg2)
+  if (!key || !count || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  DLList *list = core_retrieve_list(arg1->value.string, false);
+  DBList *list = core_retrieve_list(key, false);
 
   if (!list)
   {
-    reply->type = DB_TYPE_NULL;
+    reply_data(reply, dbobj_create_null());
     return;
   }
 
-  db_size_t count = arg2->value.size;
-
   if (count == 1)
   {
-    reply->type = DB_TYPE_STRING;
-    reply->value.string = extract_list_node(lpop(list));
+    reply_data(reply, dbobj_create_string(extract_dblistnode_string(lpop(list))));
   }
   else if (count)
   {
-    reply->type = DB_TYPE_LIST;
-    reply->value.list = lpop_n(list, count);
+    reply_data(reply, dbobj_create_list(lpop_n(list, count)));
   }
 }
 
 void db_rpush(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
-  DBArg *arg2 = arg1 ? arg1->next : NULL;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *member = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1 || !arg2)
+  if (!key || !member)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  DLList *list = core_retrieve_list(arg1->value.string, true);
+  DBList *list = core_retrieve_list(key, true);
 
   if (!list)
   {
@@ -944,120 +544,134 @@ void db_rpush(DBRequest *request, DBReply *reply)
     return;
   }
 
-  while (arg2)
+  while (member)
   {
-    rpush(list, create_list_node(arg2->value.string));
-    arg2 = arg2->next;
+    lpush(list, create_dblistnode_with_string(member));
+    member = get_string_arg(curr_arg_node);
+    curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
   }
 
-  reply->type = DB_TYPE_UINT;
-  reply->value.size = list->length;
+  reply_data(reply, dbobj_create_uint(list->length));
 }
 
 void db_rpop(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
-  DBArg *arg2 = arg1 ? arg1->next ? arg_string_to_uint(arg1->next) : add_arg_uint(request, 1) : NULL;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  db_uint_t count = curr_arg_node ? get_uint_arg(curr_arg_node) : 1;
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1 || !arg2)
+  if (!key || !count || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  DLList *list = core_retrieve_list(arg1->value.string, false);
+  DBList *list = core_retrieve_list(key, false);
 
   if (!list)
   {
-    reply->type = DB_TYPE_NULL;
+    reply_data(reply, dbobj_create_null());
     return;
   }
 
-  db_size_t count = arg2->value.size;
-
   if (count == 1)
   {
-    reply->type = DB_TYPE_STRING;
-    reply->value.string = extract_list_node(rpop(list));
+    reply_data(reply, dbobj_create_string(extract_dblistnode_string(rpop(list))));
   }
   else if (count)
   {
-    reply->type = DB_TYPE_LIST;
-    reply->value.list = rpop_n(list, count);
+    reply_data(reply, dbobj_create_list(rpop_n(list, count)));
   }
 }
 
 void db_llen(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1)
+  if (!key || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  const DLList const *list = core_retrieve_list(arg1->value.string, false);
+  const DBList const *list = core_retrieve_list(key, false);
 
-  reply->type = DB_TYPE_UINT;
-  reply->value.size = list ? list->length : 0;
+  reply_data(reply, dbobj_create_uint(list ? list->length : 0));
 }
 
 void db_lrange(DBRequest *request, DBReply *reply)
 {
-  DBArg *arg1 = request->arg_head;
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  db_uint_t start = curr_arg_node ? get_uint_arg(curr_arg_node) : 0;
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  db_uint_t stop = curr_arg_node ? get_uint_arg(curr_arg_node) : DB_SIZE_MAX;
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
-  if (!arg1)
+  if (!key || curr_arg_node)
   {
     reply_error(reply, DB_ERR_ARG_ERROR);
     return;
   }
 
-  db_size_t start = arg1->next ? arg_string_to_uint(arg1->next)->value.size : 0;
-  db_size_t stop = arg1->next ? arg1->next->next ? arg_string_to_uint(arg1->next->next)->value.size : DB_SIZE_MAX : DB_SIZE_MAX;
-  const DLList const *list = core_retrieve_list(arg1->value.string, false);
+  DBList *list = core_retrieve_list(key, false);
 
-  reply->type = DB_TYPE_LIST;
-  reply->value.list = lrange(list, start, stop);
+  list = lrange(list, start, stop);
 
-  if (!reply->value.list)
+  if (!list)
   {
     reply_error(reply, DB_ERR_WRONGTYPE);
     return;
   }
+
+  reply_data(reply, dbobj_create_list(list));
 }
 
 void db_keys(DBRequest *request, DBReply *reply)
 {
-  CoreHTEntry *entry;
-  db_size_t r;
-  DLList *reply_list = create_list();
+  DBHashEntry *entry;
+  db_uint_t r;
+  DBList *reply_list = create_dblist();
 
-  reply->type = DB_TYPE_LIST;
-  reply->value.list = reply_list;
-
-  for (db_size_t t = 0; t < 2; ++t)
+  if (core_ht->buckets0)
   {
-    if (!tables[t])
-      continue;
-    for (r = 0; r < tables[t]->size; ++r)
+    for (r = 0; r < core_ht->size0; ++r)
     {
-      entry = tables[t]->entries[r];
+      entry = core_ht->buckets0[r];
       while (entry)
       {
-        rpush(reply_list, create_list_node(entry->key));
+        rpush(reply_list, create_dblistnode_with_string(entry->key));
         entry = entry->next;
       }
     }
   }
+
+  if (core_ht->buckets1)
+  {
+    for (r = 0; r < core_ht->size1; ++r)
+    {
+      entry = core_ht->buckets1[r];
+      while (entry)
+      {
+        rpush(reply_list, create_dblistnode_with_string(entry->key));
+        entry = entry->next;
+      }
+    }
+  }
+
+  reply_data(reply, dbobj_create_list(reply_list));
 }
 
 void db_shutdown(DBRequest *request, DBReply *reply)
 {
-  reply->type = DB_TYPE_BOOL;
   if (!is_running)
   {
-    reply->value.boolean = true;
+    reply_error(reply, DB_ERR_DB_IS_CLOSED);
     return;
   }
 
@@ -1066,49 +680,51 @@ void db_shutdown(DBRequest *request, DBReply *reply)
 
   db_save(request, reply);
 
-  rehashing_index = -1;
-  core_free_table(tables[0]);
-  core_free_table(tables[1]);
+  ht_reset(core_ht);
 
-  reply->value.boolean = true;
+  reply_data(reply, dbobj_create_string_with_dup(OK));
 }
 
 void db_save(DBRequest *request, DBReply *reply)
 {
-  reply->type = DB_TYPE_BOOL;
-
   if (!persistence_filepath)
   {
-    reply->value.boolean = false;
+    reply_data(reply, dbobj_create_bool(false));
     return;
   }
 
   cJSON *root = cJSON_CreateObject();
-  CoreHTEntry *entry;
-  DLNode *dllnode;
+  DBHashEntry *entry;
+  DBListNode *dllnode;
   cJSON *cjson_list;
 
-  for (int j = 0; j < 2; ++j)
+  FILE *file = fopen(persistence_filepath, "w");
+  if (!file)
   {
-    if (!tables[j])
-      continue;
+    perror("Failed to open file while saving.");
+    reply_data(reply, dbobj_create_bool(false));
+    return;
+  }
 
-    for (db_size_t i = 0; i < tables[j]->size; ++i)
+  if (core_ht->buckets0)
+  {
+    for (db_uint_t i = 0; i < core_ht->size0; ++i)
     {
-      entry = tables[j]->entries[i];
+      entry = core_ht->buckets0[i];
       while (entry)
       {
-        switch (entry->type)
+        switch (entry->data->type)
         {
         case DB_TYPE_STRING:
-          cJSON_AddItemToObject(root, entry->key, cJSON_CreateString(entry->value.string));
+          cJSON_AddItemToObject(root, entry->key, cJSON_CreateString(entry->data->value.string));
           break;
         case DB_TYPE_LIST:
           cjson_list = cJSON_CreateArray();
-          dllnode = entry->value.list->head;
+          dllnode = entry->data->value.list->head;
           while (dllnode)
           {
-            cJSON_AddItemToArray(cjson_list, cJSON_CreateString(dllnode->data));
+            if (dbobj_is_string(dllnode->data))
+              cJSON_AddItemToArray(cjson_list, cJSON_CreateString(dllnode->data->value.string));
             dllnode = dllnode->next;
           }
           cJSON_AddItemToObject(root, entry->key, cjson_list);
@@ -1123,36 +739,58 @@ void db_save(DBRequest *request, DBReply *reply)
     }
   }
 
-  FILE *file = fopen(persistence_filepath, "w");
-  if (!file)
+  if (core_ht->buckets1)
   {
-    perror("Failed to open file while saving.");
-    reply->value.boolean = false;
-    return;
+    for (db_uint_t i = 0; i < core_ht->size1; ++i)
+    {
+      entry = core_ht->buckets1[i];
+      while (entry)
+      {
+        switch (entry->data->type)
+        {
+        case DB_TYPE_STRING:
+          cJSON_AddItemToObject(root, entry->key, cJSON_CreateString(entry->data->value.string));
+          break;
+        case DB_TYPE_LIST:
+          cjson_list = cJSON_CreateArray();
+          dllnode = entry->data->value.list->head;
+          while (dllnode)
+          {
+            if (dbobj_is_string(dllnode->data))
+              cJSON_AddItemToArray(cjson_list, cJSON_CreateString(dllnode->data->value.string));
+            dllnode = dllnode->next;
+          }
+          cJSON_AddItemToObject(root, entry->key, cjson_list);
+          cjson_list = NULL;
+          dllnode = NULL;
+          break;
+        default:
+          break;
+        }
+        entry = entry->next;
+      }
+    }
   }
 
   char *json_string = cJSON_PrintUnformatted(root);
+
+  if (!json_string)
+    EXIT_ON_MEMORY_ERROR();
+
   fputs(json_string, file);
   fclose(file);
   free(json_string);
   cJSON_Delete(root);
 
-  reply->value.boolean = true;
+  reply_data(reply, dbobj_create_string_with_dup(OK));
 }
 
 void db_flushall(DBRequest *request, DBReply *reply)
 {
   if (reply)
   {
-    reply->type = DB_TYPE_BOOL;
-    reply->value.boolean = true;
+    reply_data(reply, dbobj_create_string_with_dup(OK));
   }
 
-  core_free_table(tables[0]);
-  core_free_table(tables[1]);
-
-  tables[0] = core_create_table(INITIAL_TABLE_SIZE);
-  tables[1] = NULL;
-
-  rehashing_index = -1;
+  ht_reset(core_ht);
 }

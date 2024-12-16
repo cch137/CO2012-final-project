@@ -6,7 +6,7 @@
 
 #include "utils.h"
 #include "interaction.h"
-#include "doubly_linked_list.h"
+#include "list.h"
 #include "core.h"
 #include "api.h"
 
@@ -23,7 +23,7 @@ bool server_is_running()
   return _is_running;
 }
 
-void server_config_hash_seed(db_size_t hash_seed)
+void server_config_hash_seed(db_uint_t hash_seed)
 {
   core_lock();
   db_config_hash_seed(hash_seed);
@@ -179,7 +179,6 @@ static DBRequest *parse_command(const char *command)
     if (*pos == '\0')
       break;
 
-    DBArg *arg = NULL;
     if (*pos == '"')
     {
       // Parse quoted string
@@ -222,7 +221,7 @@ static DBRequest *parse_command(const char *command)
         string_value[i] = '\0';
         ++pos;
 
-        arg = add_arg_string(request, string_value);
+        add_request_arg(request, dbobj_create_string_with_dup(string_value));
         free(string_value);
       }
     }
@@ -242,12 +241,9 @@ static DBRequest *parse_command(const char *command)
       strncpy(string_value, start, length);
       string_value[length] = '\0';
 
-      arg = add_arg_string(request, string_value);
+      add_request_arg(request, dbobj_create_string_with_dup(string_value));
       free(string_value);
     }
-
-    if (!arg)
-      EXIT_ON_MEMORY_ERROR();
   }
 
   free(command_copy);
@@ -256,13 +252,13 @@ static DBRequest *parse_command(const char *command)
 
 static bool reply_is_error(const DBReply *reply)
 {
-  return reply->type == DB_TYPE_ERROR;
+  return reply && reply->data && reply->data->type == DB_TYPE_ERROR;
 }
 
 char *dbapi_get(const char *key)
 {
   DBRequest *request = create_request(DB_GET);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -270,8 +266,8 @@ char *dbapi_get(const char *key)
     free_reply(reply);
     return NULL;
   }
-  char *result = reply->value.string;
-  reply->value.string = NULL;
+  char *result = reply->data->value.string;
+  reply->data->value.string = NULL;
   free_reply(reply);
   return result;
 }
@@ -279,8 +275,8 @@ char *dbapi_get(const char *key)
 bool dbapi_set(const char *key, const char *value)
 {
   DBRequest *request = create_request(DB_SET);
-  add_arg_string(request, key);
-  add_arg_string(request, value);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(value));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -288,15 +284,15 @@ bool dbapi_set(const char *key, const char *value)
     free_reply(reply);
     return false;
   }
-  bool result = reply->value.boolean;
+  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }
 
-bool dbapi_del(const char *key)
+db_uint_t dbapi_del(const char *key)
 {
   DBRequest *request = create_request(DB_DEL);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -304,16 +300,33 @@ bool dbapi_del(const char *key)
     free_reply(reply);
     return false;
   }
-  bool result = reply->value.boolean;
+  db_uint_t result = reply->data->value.uint_value;
   free_reply(reply);
   return result;
 }
 
-db_size_t dbapi_lpush(const char *key, const char *value)
+bool dbapi_rename(const char *old_key, const char *new_key)
+{
+  DBRequest *request = create_request(DB_RENAME);
+  add_request_arg(request, dbobj_create_string_with_dup(old_key));
+  add_request_arg(request, dbobj_create_string_with_dup(new_key));
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return false;
+  }
+  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
+  free_reply(reply);
+  return result;
+}
+
+db_uint_t dbapi_lpush(const char *key, const char *value)
 {
   DBRequest *request = create_request(DB_LPUSH);
-  add_arg_string(request, key);
-  add_arg_string(request, value);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(value));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -321,23 +334,23 @@ db_size_t dbapi_lpush(const char *key, const char *value)
     free_reply(reply);
     return 0;
   }
-  db_size_t result = reply->value.size;
+  db_uint_t result = reply->data->value.uint_value;
   free_reply(reply);
   return result;
 }
 
-db_size_t dbapi_lpush_n(const char *key, ...)
+db_uint_t dbapi_lpush_n(const char *key, ...)
 {
   DBRequest *request = create_request(DB_LPUSH);
   va_list args;
   va_start(args, key);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   while (true)
   {
     const char *value = va_arg(args, const char *);
     if (value == NULL)
       break;
-    add_arg_string(request, value);
+    add_request_arg(request, dbobj_create_string_with_dup(value));
   }
   va_end(args);
   DBReply *reply = dbapi_request_sync(request);
@@ -347,7 +360,7 @@ db_size_t dbapi_lpush_n(const char *key, ...)
     free_reply(reply);
     return 0;
   }
-  db_size_t result = reply->value.size;
+  db_uint_t result = reply->data->value.uint_value;
   free_reply(reply);
   return result;
 }
@@ -355,7 +368,7 @@ db_size_t dbapi_lpush_n(const char *key, ...)
 char *dbapi_lpop(const char *key)
 {
   DBRequest *request = create_request(DB_LPOP);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -363,17 +376,17 @@ char *dbapi_lpop(const char *key)
     free_reply(reply);
     return NULL;
   }
-  char *result = reply->value.string;
-  reply->value.string = NULL;
+  char *result = reply->data->value.string;
+  reply->data->value.string = NULL;
   free_reply(reply);
   return result;
 }
 
-db_size_t dbapi_rpush(const char *key, const char *value)
+db_uint_t dbapi_rpush(const char *key, const char *value)
 {
   DBRequest *request = create_request(DB_RPUSH);
-  add_arg_string(request, key);
-  add_arg_string(request, value);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(value));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -381,23 +394,23 @@ db_size_t dbapi_rpush(const char *key, const char *value)
     free_reply(reply);
     return 0;
   }
-  db_size_t result = reply->value.size;
+  db_uint_t result = reply->data->value.uint_value;
   free_reply(reply);
   return result;
 }
 
-db_size_t dbapi_rpush_n(const char *key, ...)
+db_uint_t dbapi_rpush_n(const char *key, ...)
 {
   DBRequest *request = create_request(DB_RPUSH);
   va_list args;
   va_start(args, key);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   while (true)
   {
     const char *value = va_arg(args, const char *);
     if (value == NULL)
       break;
-    add_arg_string(request, value);
+    add_request_arg(request, dbobj_create_string_with_dup(value));
   }
   va_end(args);
   DBReply *reply = dbapi_request_sync(request);
@@ -407,7 +420,7 @@ db_size_t dbapi_rpush_n(const char *key, ...)
     free_reply(reply);
     return 0;
   }
-  db_size_t result = reply->value.size;
+  db_uint_t result = reply->data->value.uint_value;
   free_reply(reply);
   return result;
 }
@@ -415,7 +428,7 @@ db_size_t dbapi_rpush_n(const char *key, ...)
 char *dbapi_rpop(const char *key)
 {
   DBRequest *request = create_request(DB_RPOP);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -423,16 +436,16 @@ char *dbapi_rpop(const char *key)
     free_reply(reply);
     return NULL;
   }
-  char *result = reply->value.string;
-  reply->value.string = NULL;
+  char *result = reply->data->value.string;
+  reply->data->value.string = NULL;
   free_reply(reply);
   return result;
 }
 
-db_size_t dbapi_llen(const char *key)
+db_uint_t dbapi_llen(const char *key)
 {
   DBRequest *request = create_request(DB_LLEN);
-  add_arg_string(request, key);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -440,17 +453,17 @@ db_size_t dbapi_llen(const char *key)
     free_reply(reply);
     return 0;
   }
-  db_size_t result = reply->value.size;
+  db_uint_t result = reply->data->value.uint_value;
   free_reply(reply);
   return result;
 }
 
-DLList *dbapi_lrange(const char *key, const db_size_t start, const db_size_t end)
+DBList *dbapi_lrange(const char *key, const db_uint_t start, const db_uint_t end)
 {
   DBRequest *request = create_request(DB_LRANGE);
-  add_arg_string(request, key);
-  add_arg_uint(request, start);
-  add_arg_uint(request, end);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_uint(start));
+  add_request_arg(request, dbobj_create_uint(end));
   DBReply *reply = dbapi_request_sync(request);
   free_request(request);
   if (reply_is_error(reply))
@@ -458,13 +471,13 @@ DLList *dbapi_lrange(const char *key, const db_size_t start, const db_size_t end
     free_reply(reply);
     return NULL;
   }
-  DLList *result = reply->value.list;
-  reply->value.list = NULL;
+  DBList *result = reply->data->value.list;
+  reply->data->value.list = NULL;
   free_reply(reply);
   return result;
 }
 
-DLList *dbapi_keys()
+DBList *dbapi_keys()
 {
   DBRequest *request = create_request(DB_KEYS);
   DBReply *reply = dbapi_request_sync(request);
@@ -474,8 +487,8 @@ DLList *dbapi_keys()
     free_reply(reply);
     return NULL;
   }
-  DLList *result = reply->value.list;
-  reply->value.list = NULL;
+  DBList *result = reply->data->value.list;
+  reply->data->value.list = NULL;
   free_reply(reply);
   return result;
 }
@@ -490,9 +503,6 @@ bool dbapi_shutdown()
     free_reply(reply);
     return false;
   }
-  bool result = reply->value.boolean;
-  free_reply(reply);
-  return result;
 }
 
 bool dbapi_save()
@@ -505,7 +515,7 @@ bool dbapi_save()
     free_reply(reply);
     return false;
   }
-  bool result = reply->value.boolean;
+  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }
@@ -520,7 +530,7 @@ bool dbapi_flushall()
     free_reply(reply);
     return false;
   }
-  bool result = reply->value.boolean;
+  bool result = dbobj_is_string(reply->data) && strcmp(reply->data->value.string, OK) == 0;
   free_reply(reply);
   return result;
 }
@@ -530,7 +540,7 @@ void dbapi_free(char *s)
   free(s);
 }
 
-void dbapi_free_list(DLList *list)
+void dbapi_free_list(DBList *list)
 {
-  free_list(list);
+  free_dblist(list);
 }
