@@ -35,7 +35,7 @@ bool user_view_post(const char *user_id, const char *post_id)
   return true;
 }
 
-bool simulate_user_interaction(const char *user_id, const char **post_ids, size_t post_count)
+bool simulate_user_interaction(const char *user_id, const DBList *post_ids, size_t post_count)
 {
   return true;
 }
