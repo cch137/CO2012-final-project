@@ -4,6 +4,19 @@
 #include "db/list.h"
 #include "db/utils.h"
 #include "social_network.h"
+#include "database.h"
+
+static DBList *convert_list_with_string_array(char **array, size_t count)
+{
+  DBList *list = create_list();
+  for (size_t i = 0; i < count; i++)
+  {
+    rpush(list, create_dblistnode_with_string(array[i]));
+    free(array[i]);
+  }
+  free(array);
+  return list;
+}
 
 bool init_social_network(void)
 {
@@ -12,6 +25,7 @@ bool init_social_network(void)
 
 DBList *get_random_posts(size_t limit, size_t *out_count)
 {
+  char **list = get_post_ids(count_posts());
   return NULL;
 }
 
