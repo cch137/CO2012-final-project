@@ -1,11 +1,9 @@
-#ifndef SOCIAL_NETWORK_H
-#define SOCIAL_NETWORK_H
-
 #include <stddef.h>
 #include <stdbool.h>
 
 #include "db/list.h"
 #include "db/utils.h"
+#include "social_network.h"
 
 bool init_social_network(void)
 {
@@ -51,5 +49,3 @@ double compare_predicted_and_actual_tags(const char *user_id)
 {
   return 0;
 }
-
-#endif // SOCIAL_NETWORK_H
