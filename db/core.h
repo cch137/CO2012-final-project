@@ -57,6 +57,14 @@ void db_llen(DBRequest *request, DBReply *reply);
 // The `stop` index is inclusive, and if `stop` is -1, the entire list is returned
 void db_lrange(DBRequest *request, DBReply *reply);
 
+void db_hget(DBRequest *request, DBReply *reply);
+
+void db_hset(DBRequest *request, DBReply *reply);
+
+void db_hdel(DBRequest *request, DBReply *reply);
+
+void db_expire(DBRequest *request, DBReply *reply);
+
 void db_keys(DBRequest *request, DBReply *reply);
 
 // Stops the database and saves data to a specified file

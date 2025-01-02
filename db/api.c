@@ -156,6 +156,36 @@ static DBRequest *parse_command(const char *command)
     request->action = DB_LLEN;
   else if (strcmp(token, "LRANGE") == 0)
     request->action = DB_LRANGE;
+  else if (strcmp(token, "HGET") == 0)
+    request->action = DB_HGET;
+  else if (strcmp(token, "HSET") == 0)
+    request->action = DB_HSET;
+  else if (strcmp(token, "HDEL") == 0)
+    request->action = DB_HDEL;
+  else if (strcmp(token, "EXPIRE") == 0)
+    request->action = DB_EXPIRE;
+  else if (strcmp(token, "ZSCORE") == 0)
+    request->action = DB_ZSCORE;
+  else if (strcmp(token, "ZADD") == 0)
+    request->action = DB_ZADD;
+  else if (strcmp(token, "ZCARD") == 0)
+    request->action = DB_ZCARD;
+  else if (strcmp(token, "ZCOUNT") == 0)
+    request->action = DB_ZCOUNT;
+  else if (strcmp(token, "ZINTERSTORE") == 0)
+    request->action = DB_ZINTERSTORE;
+  else if (strcmp(token, "ZUNIONSTORE") == 0)
+    request->action = DB_ZUNIONSTORE;
+  else if (strcmp(token, "ZRANGE") == 0)
+    request->action = DB_ZRANGE;
+  else if (strcmp(token, "ZRANGEBYSCORE") == 0)
+    request->action = DB_ZRANGEBYSCORE;
+  else if (strcmp(token, "ZRANK") == 0)
+    request->action = DB_ZRANK;
+  else if (strcmp(token, "ZREM") == 0)
+    request->action = DB_ZREM;
+  else if (strcmp(token, "ZREMRANGEBYSCORE") == 0)
+    request->action = DB_ZREMRANGEBYSCORE;
   else if (strcmp(token, "KEYS") == 0)
     request->action = DB_KEYS;
   else if (strcmp(token, "FLUSHALL") == 0)

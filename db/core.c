@@ -2,6 +2,7 @@
 #include <time.h>
 #include <malloc.h>
 #include <threads.h>
+#include <math.h>
 
 #include "deps/cJSON.h"
 #include "utils.h"
@@ -34,7 +35,9 @@ static DBList *core_retrieve_list(const char *key, const db_bool_t create_new_if
 static char *persistence_filepath = NULL;
 
 static db_bool_t is_running = false;
-static DBHash *core_ht = NULL;
+static DBHash *main_ht = NULL;
+static DBHash *expr_ht = NULL;
+static db_uint_t expr_check_index = 0;
 static mtx_t *lock = NULL;
 static thrd_t core_worker_thread = -1;
 
@@ -82,12 +85,18 @@ void db_start()
   if (is_running)
     return;
 
+  srand(time(NULL));
   is_running = true;
 
-  if (core_ht)
-    ht_reset(core_ht);
+  if (main_ht)
+    ht_reset(main_ht);
   else
-    core_ht = ht_create_context();
+    main_ht = ht_create();
+
+  if (expr_ht)
+    ht_reset(expr_ht);
+  else
+    expr_ht = ht_create();
 
   db_flushall(NULL, NULL);
 
@@ -131,7 +140,7 @@ void db_start()
 
       if (cJSON_IsString(cjson_cursor))
       {
-        ht_add_entry(core_ht, ht_create_entry(key, DB_TYPE_STRING, dbutil_strdup(cJSON_GetStringValue(cjson_cursor))));
+        hset(main_ht, dbutil_strdup(key), dbobj_create_string_with_dup(cJSON_GetStringValue(cjson_cursor)), expr_ht);
       }
 
       else if (cJSON_IsArray(cjson_cursor))
@@ -148,7 +157,7 @@ void db_start()
 
           cjson_array_cursor = cjson_array_cursor->next;
         }
-        ht_add_entry(core_ht, ht_create_entry(key, DB_TYPE_LIST, list));
+        hset(main_ht, dbutil_strdup(key), dbobj_create_string_with_dup(cJSON_GetStringValue(cjson_cursor)), expr_ht);
       }
 
       cjson_cursor = cjson_cursor->next;
@@ -216,13 +225,17 @@ static int core_worker()
   const long sleep_increment_ns = NANOSECONDS_PER_SECOND / (5 * 60 * 1000);
   clock_t idle_start_time = 0;
   long sleep_duration_ns = 0;
+  db_bool_t has_request = false;
+  DBHashEntry *curr_check_entry = NULL;
 
   while (is_running)
   {
     if (!core_trylock_is_success())
       continue;
 
-    if (task_queue_head)
+    has_request = (db_bool_t)task_queue_head;
+
+    if (has_request)
     {
       if (task_queue_head->request->action != DB_INFO_DATASET_MEMORY)
       {
@@ -265,6 +278,18 @@ static int core_worker()
         case DB_LRANGE:
           db_lrange(request, reply);
           break;
+        case DB_HGET:
+          db_hget(request, reply);
+          break;
+        case DB_HSET:
+          db_hset(request, reply);
+          break;
+        case DB_HDEL:
+          db_hdel(request, reply);
+          break;
+        case DB_EXPIRE:
+          db_expire(request, reply);
+          break;
         case DB_KEYS:
           db_keys(request, reply);
           break;
@@ -291,11 +316,16 @@ static int core_worker()
         if (!task_queue_head)
           task_queue_tail = NULL;
       } while (task_queue_head);
-      core_unlock();
     }
-    else
+
+    // maintain expires ht
+    if (expr_check_index >= expr_ht->size0)
+      expr_check_index = 0;
+    ht_maintain_expires(main_ht, expr_ht, ++expr_check_index);
+    core_unlock();
+
+    if (!has_request)
     {
-      core_unlock();
       if (!idle_start_time)
       {
         idle_start_time = clock();
@@ -319,7 +349,7 @@ static const char const *core_retrieve_string(const char *key)
   if (!key)
     return NULL;
 
-  DBHashEntry *entry = ht_get_entry(core_ht, key);
+  DBHashEntry *entry = hget(main_ht, key, expr_ht);
 
   if (entry && entry->data->type == DB_TYPE_STRING)
   {
@@ -334,7 +364,7 @@ static DBList *core_retrieve_list(const char *key, const db_bool_t create_new_if
   if (!key)
     return NULL;
 
-  DBHashEntry *entry = ht_get_entry(core_ht, key);
+  DBHashEntry *entry = hget(main_ht, key, expr_ht);
 
   if (entry)
   {
@@ -344,7 +374,7 @@ static DBList *core_retrieve_list(const char *key, const db_bool_t create_new_if
   if (create_new_if_not_found)
   {
     DBList *list = create_dblist();
-    ht_add_entry(core_ht, ht_create_entry(dbutil_strdup(key), DB_TYPE_LIST, list));
+    hset(main_ht, dbutil_strdup(key), dbobj_create_list(list), expr_ht);
 
     return list;
   }
@@ -392,13 +422,7 @@ void db_set(DBRequest *request, DBReply *reply)
     return;
   }
 
-  DBHashEntry *entry = ht_get_entry(core_ht, key);
-
-  if (entry)
-    ht_set_entry_value(entry, DB_TYPE_STRING, dbutil_strdup(value));
-  else
-    ht_add_entry(core_ht, ht_create_entry(dbutil_strdup(key), DB_TYPE_STRING, dbutil_strdup(value)));
-
+  hset(main_ht, key, dbobj_create_string_with_dup(value), expr_ht);
   reply_data(reply, dbobj_create_string_with_dup(OK));
 }
 
@@ -416,17 +440,11 @@ void db_rename(DBRequest *request, DBReply *reply)
     return;
   }
 
-  DBHashEntry *entry = ht_remove_entry(core_ht, old_key);
-
-  if (!entry)
+  if (!ht_rename(main_ht, old_key, new_key, expr_ht))
   {
     reply_error(reply, DB_ERR_NONEXISTENT_KEY);
     return;
   }
-
-  free(entry->key);
-  entry->key = dbutil_strdup(new_key);
-  ht_add_entry(core_ht, entry);
 
   reply_data(reply, dbobj_create_string_with_dup(OK));
 }
@@ -443,14 +461,12 @@ void db_del(DBRequest *request, DBReply *reply)
     return;
   }
 
-  DBHashEntry *entry;
   db_uint_t deleted_count = 0;
 
   while (key)
   {
-    entry = ht_remove_entry(core_ht, key);
-    if (entry)
-      ht_free_entry(entry), ++deleted_count;
+    if (hdel(main_ht, key, expr_ht))
+      ++deleted_count;
     key = get_string_arg(curr_arg_node);
     curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
   }
@@ -546,7 +562,7 @@ void db_rpush(DBRequest *request, DBReply *reply)
 
   while (member)
   {
-    lpush(list, create_dblistnode_with_string(member));
+    rpush(list, create_dblistnode_with_string(member));
     member = get_string_arg(curr_arg_node);
     curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
   }
@@ -610,7 +626,7 @@ void db_lrange(DBRequest *request, DBReply *reply)
   curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
   db_uint_t start = curr_arg_node ? get_uint_arg(curr_arg_node) : 0;
   curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
-  db_uint_t stop = curr_arg_node ? get_uint_arg(curr_arg_node) : DB_SIZE_MAX;
+  db_uint_t stop = curr_arg_node ? get_uint_arg(curr_arg_node) : DB_UINT_MAX;
   curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
 
   if (!key || curr_arg_node)
@@ -632,39 +648,161 @@ void db_lrange(DBRequest *request, DBReply *reply)
   reply_data(reply, dbobj_create_list(list));
 }
 
+void db_hget(DBRequest *request, DBReply *reply)
+{
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *field = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+
+  if (!key || !field || curr_arg_node)
+  {
+    reply_error(reply, DB_ERR_ARG_ERROR);
+    return;
+  }
+
+  DBHashEntry *entry = hget(main_ht, key, expr_ht);
+
+  if (!entry)
+  {
+    reply_data(reply, dbobj_create_null());
+    return;
+  }
+
+  if (!dbobj_is_hash(entry->data))
+  {
+    reply_error(reply, DB_ERR_WRONGTYPE);
+    return;
+  }
+
+  DBHashEntry *field_entry = hget(entry->data->value.hash, field, NULL);
+
+  if (!field_entry || !dbobj_is_string(field_entry->data))
+    reply_data(reply, dbobj_create_null());
+  else
+    reply_data(reply, dbobj_create_string_with_dup(field_entry->data->value.string));
+}
+
+void db_hset(DBRequest *request, DBReply *reply)
+{
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *field = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *value = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+
+  if (!key || !field || !value)
+  {
+    reply_error(reply, DB_ERR_ARG_ERROR);
+    return;
+  }
+
+  DBHash *hash = NULL;
+  DBHashEntry *entry = hget(main_ht, key, expr_ht);
+
+  if (!entry)
+  {
+    hash = ht_create();
+    hset(main_ht, dbutil_strdup(key), dbobj_create_hash(hash), expr_ht);
+  }
+  else
+  {
+    hash = entry->data->value.hash;
+  }
+
+  if (entry && !dbobj_is_hash(entry->data))
+  {
+    reply_error(reply, DB_ERR_WRONGTYPE);
+    return;
+  }
+
+  db_uint_t set_count = 0;
+
+  while (field && value)
+  {
+    if (hset(hash, dbutil_strdup(field), dbobj_create_string_with_dup(value), NULL))
+      ++set_count;
+    field = get_string_arg(curr_arg_node);
+    curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+    value = get_string_arg(curr_arg_node);
+    curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  }
+
+  reply_data(reply, dbobj_create_uint(set_count));
+}
+
+void db_hdel(DBRequest *request, DBReply *reply)
+{
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *field = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+
+  if (!key || !field)
+  {
+    reply_error(reply, DB_ERR_ARG_ERROR);
+    return;
+  }
+
+  DBHashEntry *entry = hget(main_ht, key, expr_ht);
+
+  if (!entry)
+  {
+    reply_data(reply, dbobj_create_uint(0));
+    return;
+  }
+
+  if (!dbobj_is_hash(entry->data))
+  {
+    reply_error(reply, DB_ERR_WRONGTYPE);
+    return;
+  }
+
+  db_uint_t deleted_count = 0;
+
+  while (field)
+  {
+    if (hdel(entry->data->value.hash, field, NULL))
+      ++deleted_count;
+    field = get_string_arg(curr_arg_node);
+    curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  }
+
+  reply_data(reply, dbobj_create_uint(deleted_count));
+}
+
+void db_expire(DBRequest *request, DBReply *reply)
+{
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  db_uint_t expire_seconds = curr_arg_node ? get_uint_arg(curr_arg_node) : 0;
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+
+  if (!key || curr_arg_node)
+  {
+    reply_error(reply, DB_ERR_ARG_ERROR);
+    return;
+  }
+
+  if (ht_has(main_ht, key, expr_ht))
+  {
+    hset(expr_ht, key, dbobj_create_uint((db_uint_t)time(NULL) + expire_seconds), NULL);
+    reply_data(reply, dbobj_create_int(1));
+  }
+  else
+  {
+    reply_data(reply, dbobj_create_int(0));
+  }
+}
+
 void db_keys(DBRequest *request, DBReply *reply)
 {
-  DBHashEntry *entry;
-  db_uint_t r;
-  DBList *reply_list = create_dblist();
-
-  if (core_ht->buckets0)
-  {
-    for (r = 0; r < core_ht->size0; ++r)
-    {
-      entry = core_ht->buckets0[r];
-      while (entry)
-      {
-        rpush(reply_list, create_dblistnode_with_string(entry->key));
-        entry = entry->next;
-      }
-    }
-  }
-
-  if (core_ht->buckets1)
-  {
-    for (r = 0; r < core_ht->size1; ++r)
-    {
-      entry = core_ht->buckets1[r];
-      while (entry)
-      {
-        rpush(reply_list, create_dblistnode_with_string(entry->key));
-        entry = entry->next;
-      }
-    }
-  }
-
-  reply_data(reply, dbobj_create_list(reply_list));
+  reply_data(reply, dbobj_create_list(ht_keys(main_ht, expr_ht)));
 }
 
 void db_shutdown(DBRequest *request, DBReply *reply)
@@ -680,7 +818,7 @@ void db_shutdown(DBRequest *request, DBReply *reply)
 
   db_save(request, reply);
 
-  ht_reset(core_ht);
+  ht_reset(main_ht);
 
   reply_data(reply, dbobj_create_string_with_dup(OK));
 }
@@ -706,11 +844,11 @@ void db_save(DBRequest *request, DBReply *reply)
     return;
   }
 
-  if (core_ht->buckets0)
+  if (main_ht->buckets0)
   {
-    for (db_uint_t i = 0; i < core_ht->size0; ++i)
+    for (db_uint_t i = 0; i < main_ht->size0; ++i)
     {
-      entry = core_ht->buckets0[i];
+      entry = main_ht->buckets0[i];
       while (entry)
       {
         switch (entry->data->type)
@@ -739,11 +877,11 @@ void db_save(DBRequest *request, DBReply *reply)
     }
   }
 
-  if (core_ht->buckets1)
+  if (main_ht->buckets1)
   {
-    for (db_uint_t i = 0; i < core_ht->size1; ++i)
+    for (db_uint_t i = 0; i < main_ht->size1; ++i)
     {
-      entry = core_ht->buckets1[i];
+      entry = main_ht->buckets1[i];
       while (entry)
       {
         switch (entry->data->type)
@@ -792,5 +930,5 @@ void db_flushall(DBRequest *request, DBReply *reply)
     reply_data(reply, dbobj_create_string_with_dup(OK));
   }
 
-  ht_reset(core_ht);
+  ht_reset(main_ht);
 }

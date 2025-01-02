@@ -3,12 +3,14 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <float.h>
 #include <stdbool.h>
 
 #define DB_ERR_DB_IS_CLOSED "ERR database is closed"
 #define DB_ERR_ARG_ERROR "ERR wrong arguments "
 #define DB_ERR_WRONGTYPE "WRONGTYPE Operation against a key holding the wrong kind of value"
 #define DB_ERR_NONEXISTENT_KEY "ERR no such key"
+#define DB_ERR_SYNTAX_ERROR "ERR syntax error"
 #define DB_ERR_UNKNOWN_COMMAND "ERR unknown command"
 
 typedef enum db_type_t
@@ -22,6 +24,7 @@ typedef enum db_type_t
   DB_TYPE_STRING,
   DB_TYPE_LIST,
   DB_TYPE_ZSET,
+  DB_TYPE_ZSETELE,
   DB_TYPE_HASH
 } db_type_t;
 
@@ -40,18 +43,43 @@ typedef enum db_action_t
   DB_RPOP,
   DB_LLEN,
   DB_LRANGE,
+  DB_HGET,
+  DB_HSET,
+  DB_HDEL,
+  DB_EXPIRE,
+  DB_ZSCORE,
+  DB_ZADD,
+  DB_ZCARD,
+  DB_ZCOUNT,
+  DB_ZINTERSTORE,
+  DB_ZUNIONSTORE,
+  DB_ZRANGE,
+  DB_ZRANGEBYSCORE,
+  DB_ZRANK,
+  DB_ZREM,
+  DB_ZREMRANGEBYSCORE,
   DB_KEYS,
   DB_FLUSHALL,
   DB_INFO_DATASET_MEMORY,
   DB_SHUTDOWN
 } db_action_t;
 
+typedef enum db_aggregate_t
+{
+  DB_AGG_SUM,
+  DB_AGG_MAX,
+  DB_AGG_MIN
+} db_aggregate_t;
+
 typedef bool db_bool_t;
 typedef int32_t db_int_t;
 typedef uint32_t db_uint_t;
 typedef double db_double_t;
+typedef uint8_t db_uint8_t;
 
-#define DB_SIZE_MAX UINT32_MAX
+#define DB_UINT_MAX UINT32_MAX
+#define DB_DBL_P_INF DBL_MAX
+#define DB_DBL_N_INF -DBL_MAX
 
 typedef struct DBObj DBObj;
 
@@ -94,8 +122,21 @@ typedef struct DBHash
   db_int_t rehashing_index;
 } DBHash;
 
+typedef struct DBZSetElement
+{
+  db_double_t score;
+  char *member;
+  db_uint8_t level;
+  struct DBZSetElement *backward;
+  struct DBZSetElement **forward;
+} DBZSetElement;
+
 typedef struct DBZSet
 {
+  DBHash *dict;
+  db_uint8_t level;
+  DBZSetElement **sentinel_forward;
+  DBZSetElement *tail;
 } DBZSet;
 
 typedef struct DBObj
@@ -112,6 +153,7 @@ typedef struct DBObj
     char *string;
     DBList *list;
     DBZSet *zset;
+    DBZSetElement *_zsetele;
     DBHash *hash;
   } value;
 } DBObj;

@@ -1,3 +1,4 @@
+#include <time.h>
 #include <string.h>
 
 #include "utils.h"
@@ -23,6 +24,8 @@ static db_bool_t _ht_rehash_step(DBHash *ht);
 static void _ht_resize_table(DBHash *ht, int ht_index, db_uint_t new_size);
 
 static void _ht_clear(DBHash *ht);
+
+static DBHashEntry *_ht_create_entry(char *key);
 
 static db_uint_t murmurhash2(const void *key, db_uint_t len)
 {
@@ -203,7 +206,48 @@ static void _ht_clear(DBHash *ht)
   ht->rehashing_index = -1;
 }
 
-DBHash *ht_create_context()
+static DBHashEntry *ht_add(DBHash *ht, DBHashEntry *entry)
+{
+  if (!ht || !entry)
+    return NULL;
+
+  _ht_maintenance(ht);
+
+  db_uint_t index;
+
+  if (ht_is_rehashing(ht))
+  {
+    index = murmurhash2(entry->key, strlen(entry->key)) % ht->size1;
+    entry->next = ht->buckets1[index];
+    ht->buckets1[index] = entry;
+    ++ht->count1;
+    return entry;
+  }
+
+  index = murmurhash2(entry->key, strlen(entry->key)) % ht->size0;
+  entry->next = ht->buckets0[index];
+  ht->buckets0[index] = entry;
+  ++ht->count0;
+  return entry;
+}
+
+static inline db_bool_t ht_entry_is_expire(DBHashEntry *entry, time_t expire)
+{
+  if (!entry || !dbobj_is_uint(entry->data))
+    return false;
+
+  return entry->data->value.uint_value <= (db_int_t)expire;
+}
+
+static db_bool_t ht_is_expire(DBHash *expires_ht, const char *key)
+{
+  if (!expires_ht)
+    return false;
+
+  return ht_entry_is_expire(hget(expires_ht, key, NULL), time(NULL));
+}
+
+DBHash *ht_create()
 {
   DBHash *ht = (DBHash *)malloc(sizeof(DBHash));
 
@@ -236,9 +280,9 @@ void ht_reset(DBHash *ht)
   _ht_resize_table(ht, 1, 0);
 }
 
-DBHashEntry *ht_create_entry(char *key, db_type_t type, void *value)
+static DBHashEntry *_ht_create_entry(char *key)
 {
-  if (!key || !value)
+  if (!key)
     return NULL;
 
   DBHashEntry *entry = (DBHashEntry *)malloc(sizeof(DBHashEntry));
@@ -250,53 +294,80 @@ DBHashEntry *ht_create_entry(char *key, db_type_t type, void *value)
   entry->next = NULL;
   entry->data = NULL;
 
-  ht_set_entry_value(entry, type, value);
+  return entry;
+}
+
+void ht_maintain_expires(DBHash *ht, DBHash *expires_ht, db_uint8_t index)
+{
+  if (!ht || !expires_ht || index >= ht->size0)
+    return;
+
+  DBHashEntry *entry = ht->buckets0[index];
+  DBHashEntry *next = NULL;
+  time_t now = time(NULL);
+
+  while (entry)
+  {
+    next = entry->next;
+    if (ht_is_expire(expires_ht, entry->key))
+      hdel(ht, entry->key, expires_ht);
+    entry = next;
+  }
+}
+
+DBHashEntry *ht_create_entry(char *key, DBObj *obj)
+{
+  if (!key || !obj)
+    return NULL;
+
+  DBHashEntry *entry = (DBHashEntry *)malloc(sizeof(DBHashEntry));
+
+  if (!entry)
+    EXIT_ON_MEMORY_ERROR();
+
+  entry->key = key;
+  entry->next = NULL;
+  entry->data = obj;
 
   return entry;
 }
 
-void ht_free_entry(DBHashEntry *entry)
+DBObj *ht_extract_entry(DBHashEntry *entry)
 {
   if (!entry)
-    return;
+    return NULL;
+
+  DBObj *data = entry->data;
+  entry->data = NULL;
 
   free(entry->key);
-  ht_set_entry_value(entry, DB_TYPE_NULL, NULL);
   free(entry);
+
+  return data;
 }
 
-void ht_set_entry_value(DBHashEntry *entry, db_type_t type, void *value)
+db_bool_t ht_free_entry(DBHashEntry *entry)
 {
   if (!entry)
-    return;
+    return false;
 
-  if (entry->data && entry->data->type != type)
-  {
-    free_dbobj(entry->data);
-    entry->data = NULL;
-  }
+  free(entry->key);
+  free_dbobj(entry->data);
+  free(entry);
 
-  if (!value)
-    return;
-
-  switch (type)
-  {
-  case DB_TYPE_STRING:
-    entry->data = dbobj_create_string(value);
-    break;
-  case DB_TYPE_LIST:
-    entry->data = dbobj_create_list(value);
-    break;
-  default:
-    EXIT_ON_ERROR("Unsupported hash entry type");
-    break;
-  }
+  return true;
 }
 
-DBHashEntry *ht_get_entry(DBHash *ht, const char *key)
+DBHashEntry *hget(DBHash *ht, const char *key, DBHash *expires_ht)
 {
   if (!ht || !key)
     return NULL;
+
+  if (ht_is_expire(expires_ht, key))
+  {
+    hdel(ht, key, expires_ht);
+    return NULL;
+  }
 
   _ht_maintenance(ht);
 
@@ -324,35 +395,38 @@ DBHashEntry *ht_get_entry(DBHash *ht, const char *key)
   return NULL;
 }
 
-DBHashEntry *ht_add_entry(DBHash *ht, DBHashEntry *entry)
+db_bool_t hset(DBHash *ht, const char *key, DBObj *value, DBHash *expires_ht)
 {
-  if (!ht || !entry)
-    return NULL;
+  if (!ht || !key || !value)
+    return false;
 
-  _ht_maintenance(ht);
+  DBHashEntry *entry = hget(ht, key, expires_ht);
 
-  db_uint_t index;
-
-  if (ht_is_rehashing(ht))
+  if (entry)
   {
-    index = murmurhash2(entry->key, strlen(entry->key)) % ht->size1;
-    entry->next = ht->buckets1[index];
-    ht->buckets1[index] = entry;
-    ++ht->count1;
-    return entry;
+    free_dbobj(entry->data);
+    entry->data = value;
+    return true;
   }
-
-  index = murmurhash2(entry->key, strlen(entry->key)) % ht->size0;
-  entry->next = ht->buckets0[index];
-  ht->buckets0[index] = entry;
-  ++ht->count0;
-  return entry;
+  else
+  {
+    ht_add(ht, ht_create_entry(dbutil_strdup(key), value));
+    return true;
+  }
 }
 
-DBHashEntry *ht_remove_entry(DBHash *ht, const char *key)
+DBHashEntry *ht_remove(DBHash *ht, const char *key, DBHash *expires_ht)
 {
   if (!ht || !key)
     return NULL;
+
+  ht_free_entry(ht_remove(expires_ht, key, NULL));
+
+  if (ht_is_expire(expires_ht, key))
+  {
+    ht_free_entry(ht_remove(ht, key, NULL));
+    return NULL;
+  }
 
   _ht_maintenance(ht);
 
@@ -398,4 +472,74 @@ DBHashEntry *ht_remove_entry(DBHash *ht, const char *key)
   }
 
   return NULL;
+}
+
+db_bool_t hdel(DBHash *ht, const char *key, DBHash *expires_ht)
+{
+  if (!ht || !key)
+    return false;
+  return ht_free_entry(ht_remove(ht, key, expires_ht));
+}
+
+db_bool_t ht_has(DBHash *ht, const char *key, DBHash *expires_ht)
+{
+  return hget(ht, key, expires_ht) ? true : false;
+}
+
+db_bool_t ht_rename(DBHash *ht, const char *old_key, const char *new_key, DBHash *expires_ht)
+{
+  if (!ht || !old_key || !new_key)
+    return false;
+
+  DBHashEntry *entry = ht_remove(ht, old_key, expires_ht);
+
+  if (!entry)
+    return false;
+
+  free(entry->key);
+  entry->key = dbutil_strdup(new_key);
+  ht_add(ht, entry);
+
+  return true;
+}
+
+DBList *ht_keys(DBHash *ht, DBHash *expires_ht)
+{
+  if (!ht)
+    return NULL;
+
+  DBHashEntry *entry;
+  db_uint_t bucket_index;
+  DBList *key_list = create_dblist();
+  time_t now = time(NULL);
+
+  if (ht->buckets0)
+  {
+    for (bucket_index = 0; bucket_index < ht->size0; ++bucket_index)
+    {
+      entry = ht->buckets0[bucket_index];
+      while (entry)
+      {
+        if (!ht_is_expire(expires_ht, entry->key))
+          rpush(key_list, create_dblistnode_with_string(entry->key));
+        entry = entry->next;
+      }
+    }
+  }
+
+  if (ht->buckets1)
+  {
+    for (bucket_index = 0; bucket_index < ht->size1; ++bucket_index)
+    {
+      entry = ht->buckets1[bucket_index];
+      while (entry)
+      {
+        if (!ht_is_expire(expires_ht, entry->key))
+          rpush(key_list, create_dblistnode_with_string(entry->key));
+        entry = entry->next;
+      }
+    }
+  }
+
+  return key_list;
 }

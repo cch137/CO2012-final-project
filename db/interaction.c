@@ -75,50 +75,84 @@ void free_reply(DBReply *reply)
   free(reply);
 }
 
-DBReply *print_reply(DBReply *reply)
+DBObj *print_dbobj(DBObj *obj)
 {
-  if (!reply)
+  if (!obj)
   {
-    printf("(nil)\n");
-    return reply;
+    printf("(empty object)\n");
+    return obj;
   }
 
-  switch (reply->data->type)
+  switch (obj->type)
   {
   case DB_TYPE_NULL:
     printf("(nil)\n");
     break;
   case DB_TYPE_ERROR:
-    printf("(error) %s\n", reply->data->value.string ? reply->data->value.string : "");
+    printf("(error) %s\n", obj->value.string ? obj->value.string : "");
     break;
   case DB_TYPE_BOOL:
-    printf("(db_bool_t) %s\n", reply->data->value.bool_value ? "true" : "false");
+    printf("(bool) %s\n", obj->value.bool_value ? "true" : "false");
     break;
   case DB_TYPE_INT:
-    printf("(int) %lu\n", reply->data->value.uint_value);
+    printf("(int) %lu\n", obj->value.uint_value);
     break;
   case DB_TYPE_UINT:
-    printf("(uint) %lu\n", reply->data->value.uint_value);
+    printf("(uint) %lu\n", obj->value.uint_value);
     break;
   case DB_TYPE_STRING:
-    printf("%s\n", reply->data->value.string ? reply->data->value.string : "");
+    printf("\"%s\"\n", obj->value.string ? obj->value.string : "");
     break;
   case DB_TYPE_LIST:
-    printf("(list) count: %u\n", reply->data->value.list ? reply->data->value.list->length : 0);
-    if (!reply->data->value.list)
+    printf("(list) length: %u\n", obj->value.list ? obj->value.list->length : 0);
+    if (!obj->value.list)
     {
       printf("Unexpected empty pointer\n");
       break;
     }
     db_uint_t i = 0;
-    DBListNode *node = reply->data->value.list->head;
+    DBListNode *node = obj->value.list->head;
     while (node)
-      printf("  %u) %s\n", ++i, node->data->value.string), node = node->next;
+    {
+      ++i;
+      switch (node->data->type)
+      {
+      case DB_TYPE_NULL:
+        printf("  %u) (nil)\n", i);
+        break;
+      case DB_TYPE_STRING:
+        printf("  %u) \"%s\"\n", i, node->data->value.string);
+        break;
+      case DB_TYPE_DOUBLE:
+        printf("  %u) %lf\n", i, node->data->value.double_value);
+        break;
+      case DB_TYPE_INT:
+        printf("  %u) %ld\n", i, node->data->value.int_value);
+        break;
+      case DB_TYPE_UINT:
+        printf("  %u) %lu\n", i, node->data->value.uint_value);
+        break;
+      default:
+        printf("  %u) Unknown List Node", i);
+        break;
+      }
+      node = node->next;
+    }
     break;
   default:
-    printf("(unknown) type=%lu\n", reply->data->type);
+    printf("(unknown) type=%lu\n", obj->type);
     break;
   }
+
+  return obj;
+}
+
+DBReply *print_reply(DBReply *reply)
+{
+  if (reply)
+    print_dbobj(reply->data);
+  else
+    printf("(empty reply)\n");
 
   return reply;
 }

@@ -11,25 +11,33 @@
 extern db_uint_t hash_seed;
 
 // Creates a new hash table context
-DBHash *ht_create_context();
+DBHash *ht_create();
 
 // Frees the memory allocated for a hash table context
 void ht_free(DBHash *ht);
 
 void ht_reset(DBHash *ht);
 
-// Creates a new entry with the specified key and type; assigns value directly
-DBHashEntry *ht_create_entry(char *key, db_type_t type, void *value);
+void ht_maintain_expires(DBHash *ht, DBHash *expires_ht, db_uint8_t index);
 
-void ht_free_entry(DBHashEntry *entry);
+DBHashEntry *ht_create_entry(char *key, DBObj *obj);
 
-void ht_set_entry_value(DBHashEntry *entry, db_type_t type, void *value);
+DBObj *ht_extract_entry(DBHashEntry *entry);
+
+db_bool_t ht_free_entry(DBHashEntry *entry);
 
 // Retrieves an entry by key; returns NULL if not found
-DBHashEntry *ht_get_entry(DBHash *ht, const char *key);
+DBHashEntry *hget(DBHash *ht, const char *key, DBHash *expires_ht);
 
-// Adds an entry to the hash table
-DBHashEntry *ht_add_entry(DBHash *ht, DBHashEntry *entry);
+db_bool_t hset(DBHash *ht, const char *key, DBObj *value, DBHash *expires_ht);
 
 // Removes an entry by key; returns NULL if not found
-DBHashEntry *ht_remove_entry(DBHash *ht, const char *key);
+DBHashEntry *ht_remove(DBHash *ht, const char *key, DBHash *expires_ht);
+
+db_bool_t hdel(DBHash *ht, const char *key, DBHash *expires_ht);
+
+db_bool_t ht_has(DBHash *ht, const char *key, DBHash *expires_ht);
+
+db_bool_t ht_rename(DBHash *ht, const char *old_key, const char *new_key, DBHash *expires_ht);
+
+DBList *ht_keys(DBHash *ht, DBHash *expires_ht);

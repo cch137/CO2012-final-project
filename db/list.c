@@ -235,7 +235,7 @@ DBList *lrange(const DBList const *list, db_uint_t start, db_uint_t stop)
     return reply_list;
   }
 
-  if (stop == DB_SIZE_MAX || stop > list->length - 1)
+  if (stop == DB_UINT_MAX || stop > list->length - 1)
   {
     stop = list->length - 1;
   }

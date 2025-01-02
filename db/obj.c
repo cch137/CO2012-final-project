@@ -1,6 +1,7 @@
 #include "types.h"
 #include "utils.h"
 #include "list.h"
+#include "zset.h"
 
 static DBObj *_dbobj_create(db_type_t type);
 static void *_dbobj_extract_pointer(DBObj *obj);
@@ -44,6 +45,10 @@ db_bool_t dbobj_is_zset(DBObj *obj)
 db_bool_t dbobj_is_hash(DBObj *obj)
 {
   return obj && obj->type == DB_TYPE_HASH;
+};
+db_bool_t _dbobj_is_zsetele(DBObj *obj)
+{
+  return obj && obj->type == DB_TYPE_ZSETELE;
 };
 
 DBObj *dbobj_create_null()
@@ -121,6 +126,13 @@ DBObj *dbobj_create_hash(DBHash *value)
   return obj;
 }
 
+DBObj *_dbobj_create_zsetele(DBZSetElement *value)
+{
+  DBObj *obj = _dbobj_create(DB_TYPE_ZSETELE);
+  obj->value._zsetele = value;
+  return obj;
+}
+
 void free_dbobj(DBObj *obj)
 {
   if (!obj)
@@ -134,10 +146,13 @@ void free_dbobj(DBObj *obj)
     free_dblist(obj->value.list);
     break;
   case DB_TYPE_ZSET:
-    // free_dbzset(obj->value.zset);
+    free_dbzset(obj->value.zset);
     break;
   case DB_TYPE_HASH:
     // free_dbhash(obj->value.hash);
+    break;
+  case DB_TYPE_ZSETELE:
+    // skip, this will process in zset module
     break;
   default:
     break;
@@ -180,19 +195,43 @@ db_double_t dbobj_extract_double(DBObj *obj)
 }
 char *dbobj_extract_string(DBObj *obj)
 {
-  return dbobj_is_string(obj) ? obj->value.string : NULL;
+  if (!dbobj_is_string(obj))
+    return free_dbobj(obj), NULL;
+  char *string = obj->value.string;
+  obj->value.string = NULL;
+  return free_dbobj(obj), string;
 }
 DBList *dbobj_extract_list(DBObj *obj)
 {
-  return dbobj_is_list(obj) ? obj->value.list : NULL;
+  if (!dbobj_is_list(obj))
+    return free_dbobj(obj), NULL;
+  DBList *list = obj->value.list;
+  obj->value.list = NULL;
+  return free_dbobj(obj), list;
 }
 DBZSet *dbobj_extract_zset(DBObj *obj)
 {
-  return dbobj_is_zset(obj) ? obj->value.zset : NULL;
+  if (!dbobj_is_zset(obj))
+    return free_dbobj(obj), NULL;
+  DBZSet *zset = obj->value.zset;
+  obj->value.zset = NULL;
+  return free_dbobj(obj), zset;
 }
 DBHash *dbobj_extract_hash(DBObj *obj)
 {
-  return dbobj_is_hash(obj) ? obj->value.hash : NULL;
+  if (!dbobj_is_hash(obj))
+    return free_dbobj(obj), NULL;
+  DBHash *hash = obj->value.hash;
+  obj->value.hash = NULL;
+  return free_dbobj(obj), hash;
+}
+DBZSetElement *_dbobj_extract_zsetele(DBObj *obj)
+{
+  if (!_dbobj_is_zsetele(obj))
+    return free_dbobj(obj), NULL;
+  DBZSetElement *zsetele = obj->value._zsetele;
+  obj->value._zsetele = NULL;
+  return free_dbobj(obj), zsetele;
 }
 
 static DBObj *_dbobj_create(db_type_t type)

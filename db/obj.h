@@ -13,6 +13,7 @@ db_bool_t dbobj_is_string(DBObj *obj);
 db_bool_t dbobj_is_list(DBObj *obj);
 db_bool_t dbobj_is_zset(DBObj *obj);
 db_bool_t dbobj_is_hash(DBObj *obj);
+db_bool_t _dbobj_is_zsetele(DBObj *obj);
 
 DBObj *dbobj_create_null();
 DBObj *dbobj_create_error(char *message);
@@ -25,6 +26,7 @@ DBObj *dbobj_create_string_with_dup(const char *value);
 DBObj *dbobj_create_list(DBList *value);
 DBObj *dbobj_create_zset(DBZSet *value);
 DBObj *dbobj_create_hash(DBHash *value);
+DBObj *_dbobj_create_zsetele(DBZSetElement *value);
 
 void free_dbobj(DBObj *obj);
 void *dbobj_extract_null(DBObj *obj);
@@ -37,5 +39,6 @@ char *dbobj_extract_string(DBObj *obj);
 DBList *dbobj_extract_list(DBObj *obj);
 DBZSet *dbobj_extract_zset(DBObj *obj);
 DBHash *dbobj_extract_hash(DBObj *obj);
+DBZSetElement *_dbobj_extract_zsetele(DBObj *obj);
 
 #endif

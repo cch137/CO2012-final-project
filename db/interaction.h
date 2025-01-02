@@ -17,6 +17,8 @@ void free_request(DBRequest *request);
 
 void free_reply(DBReply *reply);
 
+DBObj *print_dbobj(DBObj *obj);
+
 DBReply *print_reply(DBReply *reply);
 
 DBReply *reply_error(DBReply *reply, const char *message);
