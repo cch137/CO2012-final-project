@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #include "db/utils.h"
+#include "database.h"
 
 #define RESULT_PASS "\033[0;32mPASS\033[0m"
 #define RESULT_FAIL "\033[0;31mFAIL\033[0m"
@@ -68,8 +69,17 @@ void test_dbutil_match_keys()
   }
 }
 
+void users_test()
+{
+  create_user("Alice");
+  create_user("Bob");
+  get_user_ids(0);
+}
+
 int main()
 {
-  test_dbutil_match_keys();
+  // test_dbutil_match_keys();
+  users_test();
+
   return 0;
 }

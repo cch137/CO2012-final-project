@@ -64,7 +64,7 @@ function compile_and_run {
         c_files=$(find . -type f -name "*.c" ! -path "*/\.*/*" ! -name ".*" ! -name "main.c" -print | tr '\n' ' ')
     fi
 
-    compile_command="gcc -o $OUTPUT_EXECUTABLE $c_files"  # Build command
+    compile_command="gcc -o $OUTPUT_EXECUTABLE $c_files -lhiredis"  # Build command
 
     # Terminate the previous process if it's still running
     if [ $current_pid -ne 0 ] && kill -0 $current_pid 2>/dev/null; then
