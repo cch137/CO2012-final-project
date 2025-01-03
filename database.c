@@ -91,7 +91,7 @@ DBList *get_user_ids()
   return user_ids;
 };
 
-size_t count_users(void) // 計算所有符合 user:* 的 key 數量。
+char *create_user(const char *name, DBList *a_tags)
 {
 }
 
