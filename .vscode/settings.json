@@ -14,5 +14,9 @@
     "editor.detectIndentation": false
   },
   "cmake.ignoreCMakeListsMissing": true,
-  "C_Cpp.default.compilerPath": "/bin/gcc"
+  "C_Cpp.default.compilerPath": "/bin/gcc",
+  "files.associations": {
+    "stdio.h": "c",
+    "stdlib.h": "c"
+  }
 }
