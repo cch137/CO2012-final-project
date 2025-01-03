@@ -100,7 +100,14 @@ DBList *get_user_ids()
 char *create_user(const char *name, DBList *a_tags)
 {
   if (!main_ht)
-    initialize_database();
+  {
+    main_ht = ht_create();
+  }
+
+  if (!expr_ht)
+  {
+    expr_ht = ht_create();
+  }
 
   char oid[13];
   generate_oid(oid);
