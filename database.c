@@ -99,7 +99,7 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
-  char *user_id = generate_unique_id(USER_NS_PREFIX);
+  char *user_id = generate_unique_id(USER_NAME_KEY);
 
   DBHash *user_data = ht_create();
 
