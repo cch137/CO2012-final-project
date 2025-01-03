@@ -8,6 +8,8 @@
 #include <hiredis/hiredis.h>
 #include <ctype.h>
 
+#include "db/api.h"
+
 #define USER_NS_PREFIX "user:"
 
 static bool starts_with(const char *str, const char *prefix)
