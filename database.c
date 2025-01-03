@@ -108,7 +108,7 @@ char *create_user(const char *name, DBList *a_tags)
 
   // 新增
   DBList atag[10];
-  sprintf(atag, "a_tag:%d", oid);
+  sprintf(atag, "a_tag:%f", oid);
 
   // 此處將一些欄位先設為預設值：actual_tags, predicted_tags, viewed_posts, liked_posts 等
   redisReply *reply = redisCommand(
