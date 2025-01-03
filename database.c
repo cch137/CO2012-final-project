@@ -27,10 +27,10 @@ static bool starts_with(const char *str, const char *prefix)
   return strncmp(str, prefix, prefix_len) == 0;
 }
 
-// Redis 嚙踝蕭嚙踝蕭嚙賭��嚙踝蕭���嚙�
+// Redis 連接對象
 static redisContext *redis_conn = NULL;
 
-// 嚙踝蕭嚙賣�迎蕭嚙踝蕭嚙� Redis 嚙踝蕭嚙踝蕭嚙踝蕭
+// 初始化 Redis 連接
 static void init_redis()
 {
   if (!redis_conn)
@@ -44,7 +44,7 @@ static void init_redis()
   }
 }
 
-// ���鈭�嚙賜��嚙質都嚙質��嚙踝蕭��潘撓嚙賭遛嚙質��嚙踝蕭嚙踝蕭嚙賜��嚙踝蕭嚙踝蕭
+// 工具函數：檢查鍵的合法性
 static bool is_valid_key(const char *key)
 {
   const char invalid_chars[] = "*:[]?\\";
@@ -59,12 +59,12 @@ static bool is_valid_key(const char *key)
   return true;
 }
 
-// ���鈭�嚙賜��嚙質都嚙質��嚙踝蕭嚙踝蕭嚙踝蕭嚙踝蕭嚙踝蕭��哨蕭嚙� OID
+// 工具函數：生成唯一 OID
 static void generate_oid(char *oid)
 {
   const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   int timestamp = (int)time(NULL);
-  sprintf(oid, "%06X", timestamp); // 嚙踝蕭嚙� 6 ��選蕭嚙踝蕭蝞賂蕭嚙踝蕭嚙踝蕭嚙踝蕭嚙�
+  sprintf(oid, "%06X", timestamp); // 前 6 位為時間戳
   for (int i = 0; i < 6; i++)
   {
     oid[6 + i] = charset[rand() % (sizeof(charset) - 1)];
@@ -73,10 +73,10 @@ static void generate_oid(char *oid)
 }
 
 //----------------------------------
-// User ������嚙踝蕭
+// User 模組
 //----------------------------------
 
-// 嚙踝蕭嚙賣�綽蕭 ��輯撒嚙賢�鳴蕭嚙� IDs
+// 取得 使用者 IDs
 DBList *get_user_ids()
 {
   DBList *list = dbapi_keys();
@@ -99,24 +99,13 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
-  init_redis();
-  if (name && !is_valid_key(name))
-  {
-    fprintf(stderr, "Invalid user name.\n");
-    return NULL;
-  }
+  char *user_id = generate_unique_id(USER_NS_PREFIX);
 
-  char oid[13];
-  generate_oid(oid);
+  DBHash *user_data = ht_create();
 
-  char key[64];
-  sprintf(key, "user:%s", oid);
+  if (name && strlen(name) > 0)
+    hset(user_data, USER_NAME_KEY, dbobj_create_string_with_dup(name), NULL);
 
-  // 嚙踝蕭���嚙踝蕭
-  DBList atag[10];
-  sprintf(atag, "a_tag:%d", oid);
-
-  // Set the user's interest tags (a_tags) if provided
   if (a_tags)
   {
     DBList *tags_copy = create_dblist();
@@ -130,15 +119,13 @@ char *create_user(const char *name, DBList *a_tags)
     hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
-  // Save the user data into the database
   hset(main_ht, user_id, dbobj_create_hash(user_data), expr_ht);
 
-  // Return the newly created user's ID
   return user_id;
 }
 
 //----------------------------------
-// Post ������嚙踝蕭
+// Post 模組
 //----------------------------------
 
 DBList *get_post_ids()
@@ -173,7 +160,7 @@ DBList *get_posts_by_tag(const char *tag_id)
 {
 }
 //----------------------------------
-// Tag ������嚙踝蕭
+// Tag 模組
 //----------------------------------
 
 DBList *get_tag_ids()
@@ -216,7 +203,7 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
 }
 
-// ���嚙質��蝞賂蕭皜賂蕭嚙賡��嚙踝蕭嚙踝蕭��剁蕭
+// 清空整個資料庫
 void flush_all(void)
 {
 }
