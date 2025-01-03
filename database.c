@@ -99,29 +99,38 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
+  // 確保資料庫初始化
   if (!main_ht)
-  {
     main_ht = ht_create();
-  }
 
   if (!expr_ht)
-  {
     expr_ht = ht_create();
-  }
 
+  // 生成 OID
   char oid[13];
   generate_oid(oid);
+
+  // 分配 user_id
   char *user_id = (char *)malloc(strlen(USER_NS_PREFIX) + strlen(oid) + 1);
   if (!user_id)
     EXIT_ON_MEMORY_ERROR();
-  sprintf(user_id, "%s%s", USER_NS_PREFIX, oid);
 
+  snprintf(user_id, strlen(USER_NS_PREFIX) + strlen(oid) + 1, "%s%s", USER_NS_PREFIX, oid);
+
+  // 建立使用者資料
   DBHash *user_data = ht_create();
+  if (!user_data)
+  {
+    free(user_id);
+    EXIT_ON_MEMORY_ERROR();
+  }
 
+  // 處理 name
   if (name && strlen(name) > 0)
     hset(user_data, USER_NAME_KEY, dbobj_create_string_with_dup(name), NULL);
 
-  if (a_tags)
+  // 處理 a_tags
+  if (a_tags && a_tags->length > 0)
   {
     DBList *tags_copy = create_dblist();
     DBListNode *curr = a_tags->head;
@@ -134,9 +143,10 @@ char *create_user(const char *name, DBList *a_tags)
     hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
+  // 儲存使用者資料到 main_ht
   hset(main_ht, user_id, dbobj_create_hash(user_data), expr_ht);
 
-  return user_id;
+  return user_id; // 回傳使用者 ID
 }
 
 //----------------------------------
