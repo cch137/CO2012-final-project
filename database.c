@@ -14,6 +14,12 @@
 #define USER_NS_PREFIX "user:"
 #define POST_NS_PREFIX "post:"
 #define TAG_NS_PREFIX "tag:"
+#define USER_NAME_KEY "name"
+#define USER_ATAGS_KEY "a_tags"
+#define USER_NS_PREFIX "user:"
+
+DBHash *main_ht = NULL;
+DBHash *expr_ht = NULL;
 
 static bool starts_with(const char *str, const char *prefix)
 {
