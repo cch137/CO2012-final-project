@@ -21,10 +21,10 @@ static bool starts_with(const char *str, const char *prefix)
   return strncmp(str, prefix, prefix_len) == 0;
 }
 
-// Redis �����亙��鞊�
+// Redis 嚙踝蕭嚙踝蕭嚙賭��嚙踝蕭���嚙�
 static redisContext *redis_conn = NULL;
 
-// ���憪���� Redis ������
+// 嚙踝蕭嚙賣�迎蕭嚙踝蕭嚙� Redis 嚙踝蕭嚙踝蕭嚙踝蕭
 static void init_redis()
 {
   if (!redis_conn)
@@ -38,7 +38,7 @@ static void init_redis()
   }
 }
 
-// 撌亙�瑕�賣�賂��瑼Ｘ�仿�萇�����瘜����
+// ���鈭�嚙賜��嚙質都嚙質��嚙踝蕭��潘撓嚙賭遛嚙質��嚙踝蕭嚙踝蕭嚙賜��嚙踝蕭嚙踝蕭
 static bool is_valid_key(const char *key)
 {
   const char invalid_chars[] = "*:[]?\\";
@@ -53,12 +53,12 @@ static bool is_valid_key(const char *key)
   return true;
 }
 
-// 撌亙�瑕�賣�賂����������臭�� OID
+// ���鈭�嚙賜��嚙質都嚙質��嚙踝蕭嚙踝蕭嚙踝蕭嚙踝蕭嚙踝蕭��哨蕭嚙� OID
 static void generate_oid(char *oid)
 {
   const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   int timestamp = (int)time(NULL);
-  sprintf(oid, "%06X", timestamp); // ��� 6 雿���箸��������
+  sprintf(oid, "%06X", timestamp); // 嚙踝蕭嚙� 6 ��選蕭嚙踝蕭蝞賂蕭嚙踝蕭嚙踝蕭嚙踝蕭嚙�
   for (int i = 0; i < 6; i++)
   {
     oid[6 + i] = charset[rand() % (sizeof(charset) - 1)];
@@ -67,10 +67,10 @@ static void generate_oid(char *oid)
 }
 
 //----------------------------------
-// User 璅∠��
+// User ������嚙踝蕭
 //----------------------------------
 
-// ���敺� 雿輻�刻�� IDs
+// 嚙踝蕭嚙賣�綽蕭 ��輯撒嚙賢�鳴蕭嚙� IDs
 DBList *get_user_ids()
 {
   DBList *list = dbapi_keys();
@@ -106,7 +106,7 @@ char *create_user(const char *name, DBList *a_tags)
   char key[64];
   sprintf(key, "user:%s", oid);
 
-  // ��啣��
+  // 嚙踝蕭���嚙踝蕭
   DBList atag[10];
   sprintf(atag, "a_tag:%d", oid);
 
@@ -132,7 +132,7 @@ char *create_user(const char *name, DBList *a_tags)
 }
 
 //----------------------------------
-// Post 璅∠��
+// Post ������嚙踝蕭
 //----------------------------------
 
 DBList *get_post_ids()
@@ -167,7 +167,7 @@ DBList *get_posts_by_tag(const char *tag_id)
 {
 }
 //----------------------------------
-// Tag 璅∠��
+// Tag ������嚙踝蕭
 //----------------------------------
 
 DBList *get_tag_ids()
@@ -210,7 +210,7 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
 }
 
-// 皜�蝛箸�游��鞈����摨�
+// ���嚙質��蝞賂蕭皜賂蕭嚙賡��嚙踝蕭嚙踝蕭��剁蕭
 void flush_all(void)
 {
 }
