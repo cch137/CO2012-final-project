@@ -93,33 +93,35 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
-  init_redis();
-  if (name && !is_valid_key(name))
+  // Generate a unique ID for the user
+  char *user_id = generate_unique_id(USER_NS_PREFIX);
+
+  // Create a hash structure to store user data
+  DBHash *user_data = ht_create();
+
+  // Set the user's name if provided
+  if (name && strlen(name) > 0)
+    hset(user_data, USER_NAME_KEY, dbobj_create_string_with_dup(name), NULL);
+
+  // Set the user's interest tags (a_tags) if provided
+  if (a_tags)
   {
-    fprintf(stderr, "Invalid user name.\n");
-    return NULL;
+    DBList *tags_copy = create_dblist();
+    DBListNode *curr = a_tags->head;
+    while (curr)
+    {
+      if (dbobj_is_string(curr->data))
+        rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      curr = curr->next;
+    }
+    hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
-  char oid[13];
-  generate_oid(oid);
+  // Save the user data into the database
+  hset(main_ht, user_id, dbobj_create_hash(user_data), expr_ht);
 
-  char key[64];
-  sprintf(key, "user:%s", oid);
-
-  // 新增
-  DBList atag[10];
-  sprintf(atag, "a_tag:%d", oid);
-
-  // 此處將一些欄位先設為預設值：actual_tags, predicted_tags, viewed_posts, liked_posts 等
-  redisReply *reply = redisCommand(
-      redis_conn,
-      "HMSET %s name %s actual_tags '{}' predicted_tags '{}' viewed_posts '[]' liked_posts '[]'",
-      key,
-      name ? name : "");
-  if (reply)
-    freeReplyObject(reply);
-
-  return strdup(oid);
+  // Return the newly created user's ID
+  return user_id;
 }
 
 //----------------------------------
