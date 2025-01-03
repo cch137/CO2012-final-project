@@ -69,13 +69,6 @@ void test_dbutil_match_keys()
   }
 }
 
-void users_test()
-{
-  create_user("Alice");
-  create_user("Bob");
-  get_user_ids(0);
-}
-
 int main()
 {
   // test_dbutil_match_keys();

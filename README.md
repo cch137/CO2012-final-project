@@ -13,14 +13,6 @@
 3. **觸及率優化：**
    - 在社團內發布的帖子優先觸及社團成員，透過 Redis 的分層排序機制提高其可見性。
 
-## TODO:
+## **TODO**
 
-- is_valid_key 要判斷是不是空 string
-
-- malloc, realloc, calloc 之後要檢查空指針
-
-## 其他事項
-
-- `freeReplyObject` 和 `free` 會忽略空指針 NULL，所以不檢查傳入值也無妨，可降低 code 的複雜性。
-
-- 程式碼需要避免[魔術數字]（e.g. `char *key[64]`）(https://www.google.com/search?q=%E9%AD%94%E6%B3%95%E6%95%B8%E5%AD%97&)的出現，用 `#define` 去定義常數。
+- `create_dblistnode_with_string` 不需要 strdup
