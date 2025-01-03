@@ -69,13 +69,13 @@ static void generate_oid(char *oid)
 //----------------------------------
 
 // 取得符合 user:* pattern 的使用者 IDs，最多取 limit 筆。
-DBList *get_user_ids(size_t limit)
+DBList *get_user_ids()
 {
   DBList *list = dbapi_keys();
   DBList *user_ids = create_dblist();
   DBListNode *curr = list->head;
 
-  while (curr && user_ids->length < limit)
+  while (curr)
   {
     if (!dbobj_is_string(curr->data))
       continue;
