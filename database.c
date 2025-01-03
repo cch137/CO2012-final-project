@@ -219,8 +219,40 @@ char *create_post(DBList *tags)
   return post_id;
 }
 
-DBList *get_post_tags(const char *tag_id)
+DBList *get_post_tags(const char *post_id)
 {
+  if (!post_id)
+    return NULL;
+
+  // 確保主 Hash Table 已初始化
+  if (!main_ht)
+    return NULL;
+
+  // 從主 Hash Table 獲取貼文數據
+  DBHashEntry *entry = hget(main_ht, post_id, expr_ht);
+  if (!entry || !dbobj_is_hash(entry->data))
+    return NULL;
+
+  DBHash *post_data = entry->data->value.hash;
+
+  // 從貼文數據中獲取標籤列表
+  DBHashEntry *tags_entry = hget(post_data, POST_TAGS_KEY, NULL);
+  if (!tags_entry || !dbobj_is_list(tags_entry->data))
+    return NULL;
+
+  // 複製標籤列表，確保調用者負責釋放內存
+  DBList *tags_copy = create_dblist();
+  DBListNode *curr = tags_entry->data->value.list->head;
+  while (curr)
+  {
+    if (dbobj_is_string(curr->data))
+    {
+      rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    }
+    curr = curr->next;
+  }
+
+  return tags_copy;
 }
 
 DBList *get_posts_by_tag(const char *tag_id)
