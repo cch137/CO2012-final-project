@@ -93,83 +93,54 @@ size_t count_users(void) // 計算所有符合 user:* 的 key 數量。
 {
 }
 
-char *create_user(const char *name) // 建立一個新使用者，並傳回該使用者的 OID。
-{
-}
-
-bool delete_user(const char *user_id) // 刪除指定 user_id 的使用者。
-{
-}
-
-bool rename_user(const char *user_id, const char *new_name)
-{
-}
-
-char *get_user_by_name(const char *name)
-{
-}
-
-char **get_user_posts(const char *user_id, size_t *out_count)
-{
-}
-
-bool mark_post_as_viewed_by_user(const char *user_id, const char *post_id)
-{
-}
-
-bool mark_post_as_liked_by_user(const char *user_id, const char *post_id)
-{
-}
-
 //----------------------------------
 // Post 模組
 //----------------------------------
 
-char **get_post_ids(size_t *out_count)
+DBList *get_post_ids()
 {
 }
 
-size_t count_posts(void)
+char *create_post(DBList *tags)
 {
 }
 
+DBList *get_post_tags(const char *tag_id)
+{
+}
+
+DBList *get_posts_by_tag(const char *tag_id)
+{
+}
 //----------------------------------
 // Tag 模組
 //----------------------------------
 
-char **get_tag_ids(size_t *out_count)
+DBList *get_tag_ids()
 {
 }
 
-size_t count_tags(void)
+char *create_tag(const char *name)
 {
 }
 
-bool edit_tag(const char *tag_id, const char *new_text)
+DBList *get_user_atags(const char *user_id)
 {
 }
 
-//----------------------------------
-// 標籤權重管理
-//----------------------------------
-
-bool post_increase_tag_weight(const char *post_id, const char *tag_id, int increment)
+db_bool_t set_user_atags(const char *user_id, DBList *tags)
 {
 }
 
-bool post_decrease_tag_weight(const char *post_id, const char *tag_id, int decrement)
+DBList *get_user_ptags(const char *user_id)
 {
 }
 
-//----------------------------------
-// 推薦系統與工具
-//----------------------------------
-
-char **get_posts_by_tag(const char *tag_id, size_t limit, size_t *out_count)
+db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
 }
 
-// 支援動態索引
-bool create_index_for_tags(void)
+// 清空整個資料庫
+void flush_all(void)
 {
 }
