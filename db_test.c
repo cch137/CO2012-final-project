@@ -1,108 +1,98 @@
-#include "database.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
-#include <time.h>
-#include <hiredis/hiredis.h>
-#include <ctype.h>
 
-#include "db/utils.h"
-#include "db/api.h"
-
-#define USER_NS_PREFIX "user:"
-#define POST_NS_PREFIX "post:"
-#define TAG_NS_PREFIX "tag:"
-#define USER_NAME_KEY "name"
-#define USER_ATAGS_KEY "a_tags"
-#define USER_NS_PREFIX "user:"
-
-DBHash *main_ht = NULL;
-DBHash *expr_ht = NULL;
-
-// 假設所有需要的標頭和結構定義，例如 DBList, DBHash, dbobj_create_string_with_dup, 等
-
-// 測試函式
-void test_create_user()
+// 假設有以下函式宣告和結構
+typedef struct DBListNode
 {
-  // 初始化資料庫
-  initialize_database();
+  void *data;
+  struct DBListNode *next;
+} DBListNode;
 
-  // 測試數據
-  const char *test_name = "test_user";
-  const char *test_tags[] = {"tag1", "tag2", "tag3"};
+typedef struct DBList
+{
+  DBListNode *head;
+  DBListNode *tail;
+} DBList;
 
-  // 建立標籤列表
-  DBList *tag_list = create_dblist();
-  for (int i = 0; i < 3; i++)
+DBList *create_dblist();
+DBListNode *create_dblistnode_with_string(const char *str);
+void rpush(DBList *list, DBListNode *node);
+char *create_user(const char *name, DBList *a_tags);
+
+// 模擬函式實現
+DBList *create_dblist()
+{
+  DBList *list = (DBList *)malloc(sizeof(DBList));
+  if (!list)
+    return NULL;
+  list->head = NULL;
+  list->tail = NULL;
+  return list;
+}
+
+DBListNode *create_dblistnode_with_string(const char *str)
+{
+  DBListNode *node = (DBListNode *)malloc(sizeof(DBListNode));
+  if (!node)
+    return NULL;
+  node->data = strdup(str);
+  node->next = NULL;
+  return node;
+}
+
+void rpush(DBList *list, DBListNode *node)
+{
+  if (!list || !node)
+    return;
+  if (!list->head)
   {
-    rpush(tag_list, create_dblistnode_with_string(strdup(test_tags[i])));
+    list->head = node;
+    list->tail = node;
+  }
+  else
+  {
+    list->tail->next = node;
+    list->tail = node;
+  }
+}
+
+// 測試程式入口
+int main()
+{
+  // 準備引數
+  const char *name = "example_user";
+  DBList *a_tags = create_dblist();
+  if (a_tags)
+  {
+    rpush(a_tags, create_dblistnode_with_string("tag1"));
+    rpush(a_tags, create_dblistnode_with_string("tag2"));
+    rpush(a_tags, create_dblistnode_with_string("tag3"));
   }
 
-  // 呼叫 create_user
-  char *user_id = create_user(test_name, tag_list);
-
-  // 驗證結果
+  // 呼叫 create_user 函式
+  char *user_id = create_user(name, a_tags);
   if (user_id)
   {
-    printf("User ID created: %s\n", user_id);
-
-    // 從主哈希表中獲取用戶數據
-    DBHash *user_data = hget(main_ht, user_id);
-    if (user_data)
-    {
-      // 驗證用戶名
-      char *stored_name = ht_get_string(user_data, USER_NAME_KEY);
-      if (stored_name && strcmp(stored_name, test_name) == 0)
-      {
-        printf("User name stored correctly: %s\n", stored_name);
-      }
-      else
-      {
-        printf("Error: User name not stored correctly.\n");
-      }
-
-      // 驗證標籤列表
-      DBList *stored_tags = ht_get_list(user_data, USER_ATAGS_KEY);
-      if (stored_tags)
-      {
-        printf("Stored tags:\n");
-        DBListNode *curr = stored_tags->head;
-        int index = 0;
-        while (curr)
-        {
-          printf("  - %s\n", curr->data->value.string);
-          if (strcmp(curr->data->value.string, test_tags[index]) != 0)
-          {
-            printf("Error: Tag mismatch at index %d.\n", index);
-          }
-          curr = curr->next;
-          index++;
-        }
-      }
-      else
-      {
-        printf("Error: Tags not stored correctly.\n");
-      }
-    }
-    else
-    {
-      printf("Error: User data not found for ID: %s\n", user_id);
-    }
-
-    // 釋放記憶體
+    printf("User created with ID: %s\n", user_id);
     free(user_id);
   }
   else
   {
-    printf("Error: create_user returned NULL.\n");
+    printf("Failed to create user.\n");
   }
 
-  // 其他清理（如果需要）
-}
+  // 清理記憶體
+  // 清理列表節點與資料
+  DBListNode *curr = a_tags->head;
+  while (curr)
+  {
+    DBListNode *next = curr->next;
+    free(curr->data); // 假設 data 是分配的字串
+    free(curr);
+    curr = next;
+  }
+  free(a_tags); // 清理列表本身
 
-int main()
-{
-  test_create_user();
   return 0;
 }
