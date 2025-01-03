@@ -93,6 +93,45 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
+  init_redis();
+  if (name && !is_valid_key(name))
+  {
+    fprintf(stderr, "Invalid user name.\n");
+    return NULL;
+  }
+
+  char oid[13];
+  generate_oid(oid);
+
+  char key[64];
+  sprintf(key, "user:%s", oid);
+
+  // 準備 a_tags 的 JSON 字串
+  char *a_tags_json = NULL;
+  if (a_tags)
+  {
+    a_tags_json = db_list_to_json(a_tags); // 假設您有一個函式將 DBList 轉換為 JSON
+  }
+
+  // 使用 HMSET 設定使用者的基本資訊
+  redisReply *reply = redisCommand(
+      redis_conn,
+      "HMSET %s name %s actual_tags %s predicted_tags '{}' viewed_posts '[]' liked_posts '[]'",
+      key,
+      name ? name : "",
+      a_tags_json ? a_tags_json : "'[]'");
+
+  if (reply)
+  {
+    freeReplyObject(reply);
+  }
+
+  if (a_tags_json)
+  {
+    free(a_tags_json);
+  }
+
+  return strdup(oid);
 }
 
 //----------------------------------
