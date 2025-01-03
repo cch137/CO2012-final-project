@@ -189,7 +189,7 @@ db_uint_t get_uint_arg(DBListNode *curr_node)
   if (!curr_node || !curr_node->data)
     return 0;
   if (dbobj_is_string(curr_node->data))
-    arg_string_to_uint(curr_node->data);
+    dbobj_string_to_uint(curr_node->data);
   if (dbobj_is_uint(curr_node->data))
     return curr_node->data->value.uint_value;
   return 0;
@@ -200,40 +200,8 @@ db_int_t get_int_arg(DBListNode *curr_node)
   if (!curr_node || !curr_node->data)
     return 0;
   if (dbobj_is_string(curr_node->data))
-    arg_string_to_int(curr_node->data);
+    dbobj_string_to_int(curr_node->data);
   if (dbobj_is_int(curr_node->data))
     return curr_node->data->value.int_value;
   return 0;
-}
-
-DBObj *arg_string_to_uint(DBObj *obj)
-{
-  if (!obj || obj->type != DB_TYPE_STRING)
-    return obj;
-
-  char *s = obj->value.string;
-  if (s)
-  {
-    obj->type = DB_TYPE_UINT;
-    obj->value.uint_value = (db_uint_t)strtoul(s, NULL, 10),
-    free(s);
-  }
-
-  return obj;
-}
-
-DBObj *arg_string_to_int(DBObj *obj)
-{
-  if (!obj || obj->type != DB_TYPE_STRING)
-    return obj;
-
-  char *s = obj->value.string;
-  if (s)
-  {
-    obj->type = DB_TYPE_INT;
-    obj->value.int_value = (db_int_t)strtol(s, NULL, 10),
-    free(s);
-  }
-
-  return obj;
 }

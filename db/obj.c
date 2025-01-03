@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "types.h"
 #include "utils.h"
 #include "list.h"
@@ -248,4 +250,49 @@ static void *_dbobj_extract_pointer(DBObj *obj)
   void *pointer = obj->value._pointer;
   free_dbobj(obj);
   return pointer;
+}
+
+DBObj *dbobj_string_to_uint(DBObj *obj)
+{
+  if (!obj || obj->type != DB_TYPE_STRING)
+    return obj;
+
+  char *s = obj->value.string;
+  if (s)
+  {
+    obj->type = DB_TYPE_UINT;
+    obj->value.uint_value = (db_uint_t)strtoul(s, NULL, 10),
+    free(s);
+  }
+
+  return obj;
+}
+
+DBObj *dbobj_string_to_int(DBObj *obj)
+{
+  if (!obj || obj->type != DB_TYPE_STRING)
+    return obj;
+
+  char *s = obj->value.string;
+  if (s)
+  {
+    obj->type = DB_TYPE_INT;
+    obj->value.int_value = (db_int_t)strtol(s, NULL, 10),
+    free(s);
+  }
+
+  return obj;
+}
+
+DBObj *dbobj_int_to_string(DBObj *obj)
+{
+  if (!obj || obj->type != DB_TYPE_INT)
+    return obj;
+
+  char str[20];
+  sprintf(str, "%d", obj->value.int_value);
+  obj->type = DB_TYPE_STRING;
+  obj->value.string = dbutil_strdup(str);
+
+  return obj;
 }

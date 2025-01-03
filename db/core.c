@@ -287,6 +287,9 @@ static int core_worker()
         case DB_HDEL:
           db_hdel(request, reply);
           break;
+        case DB_HINCRBY:
+          db_hincrby(request, reply);
+          break;
         case DB_EXPIRE:
           db_expire(request, reply);
           break;
@@ -773,6 +776,39 @@ void db_hdel(DBRequest *request, DBReply *reply)
   }
 
   reply_data(reply, dbobj_create_uint(deleted_count));
+}
+
+void db_hincrby(DBRequest *request, DBReply *reply)
+{
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *key = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  char *field = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+  db_int_t value = get_int_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+
+  if (!key || !field || curr_arg_node)
+  {
+    reply_error(reply, DB_ERR_ARG_ERROR);
+    return;
+  }
+
+  DBHashEntry *entry = hget(main_ht, key, expr_ht);
+
+  if (!entry)
+  {
+    reply_error(reply, DB_ERR_NONEXISTENT_KEY);
+    return;
+  }
+
+  if (!dbobj_is_hash(entry->data))
+  {
+    reply_error(reply, DB_ERR_WRONGTYPE);
+    return;
+  }
+
+  reply_data(reply, dbobj_create_int(hincrby(entry->data->value.hash, field, value, NULL)));
 }
 
 void db_expire(DBRequest *request, DBReply *reply)

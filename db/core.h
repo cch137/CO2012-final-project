@@ -63,6 +63,8 @@ void db_hset(DBRequest *request, DBReply *reply);
 
 void db_hdel(DBRequest *request, DBReply *reply);
 
+void db_hincrby(DBRequest *request, DBReply *reply);
+
 void db_expire(DBRequest *request, DBReply *reply);
 
 void db_keys(DBRequest *request, DBReply *reply);

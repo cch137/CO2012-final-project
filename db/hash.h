@@ -36,6 +36,8 @@ DBHashEntry *ht_remove(DBHash *ht, const char *key, DBHash *expires_ht);
 
 db_bool_t hdel(DBHash *ht, const char *key, DBHash *expires_ht);
 
+db_int_t hincrby(DBHash *ht, const char *key, db_int_t value, DBHash *expires_ht);
+
 db_bool_t ht_has(DBHash *ht, const char *key, DBHash *expires_ht);
 
 db_bool_t ht_rename(DBHash *ht, const char *old_key, const char *new_key, DBHash *expires_ht);

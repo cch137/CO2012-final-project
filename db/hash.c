@@ -481,6 +481,30 @@ db_bool_t hdel(DBHash *ht, const char *key, DBHash *expires_ht)
   return ht_free_entry(ht_remove(ht, key, expires_ht));
 }
 
+db_int_t hincrby(DBHash *ht, const char *key, db_int_t value, DBHash *expires_ht)
+{
+  if (!ht || !key)
+    return 0;
+
+  DBHashEntry *entry = hget(ht, key, expires_ht);
+
+  if (!entry)
+  {
+    hset(ht, key, dbobj_int_to_string(dbobj_create_int(value)), expires_ht);
+    return value;
+  }
+
+  dbobj_string_to_int(entry->data);
+  if (!dbobj_is_int(entry->data))
+    return 0;
+
+  entry->data->value.int_value += value;
+  value = entry->data->value.int_value;
+  dbobj_int_to_string(entry->data);
+
+  return value;
+}
+
 db_bool_t ht_has(DBHash *ht, const char *key, DBHash *expires_ht)
 {
   return hget(ht, key, expires_ht) ? true : false;

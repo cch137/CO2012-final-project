@@ -41,4 +41,8 @@ DBZSet *dbobj_extract_zset(DBObj *obj);
 DBHash *dbobj_extract_hash(DBObj *obj);
 DBZSetElement *_dbobj_extract_zsetele(DBObj *obj);
 
+DBObj *dbobj_string_to_uint(DBObj *obj);
+DBObj *dbobj_string_to_int(DBObj *obj);
+DBObj *dbobj_int_to_string(DBObj *obj);
+
 #endif

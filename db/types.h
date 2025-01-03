@@ -45,6 +45,7 @@ typedef enum db_action_t
   DB_LRANGE,
   DB_HGET,
   DB_HSET,
+  DB_HINCRBY,
   DB_HDEL,
   DB_EXPIRE,
   DB_ZSCORE,

@@ -29,8 +29,4 @@ char *get_string_arg(DBListNode *curr_node);
 db_uint_t get_uint_arg(DBListNode *curr_node);
 db_int_t get_int_arg(DBListNode *curr_node);
 
-DBObj *arg_string_to_uint(DBObj *obj);
-
-DBObj *arg_string_to_int(DBObj *obj);
-
 #endif

@@ -160,6 +160,8 @@ static DBRequest *parse_command(const char *command)
     request->action = DB_HGET;
   else if (strcmp(token, "HSET") == 0)
     request->action = DB_HSET;
+  else if (strcmp(token, "HINCRBY") == 0)
+    request->action = DB_HINCRBY;
   else if (strcmp(token, "HDEL") == 0)
     request->action = DB_HDEL;
   else if (strcmp(token, "EXPIRE") == 0)
@@ -503,6 +505,77 @@ DBList *dbapi_lrange(const char *key, const db_uint_t start, const db_uint_t end
   }
   DBList *result = reply->data->value.list;
   reply->data->value.list = NULL;
+  free_reply(reply);
+  return result;
+}
+
+char *dbapi_hget(const char *key, const char *field)
+{
+  DBRequest *request = create_request(DB_HGET);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(field));
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return NULL;
+  }
+  char *result = reply->data->value.string;
+  reply->data->value.string = NULL;
+  free_reply(reply);
+  return result;
+}
+
+db_uint_t dbapi_hset(const char *key, const char *field, const char *value)
+{
+  DBRequest *request = create_request(DB_HSET);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(field));
+  add_request_arg(request, dbobj_create_string_with_dup(value));
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_uint_t result = reply->data->value.uint_value;
+  free_reply(reply);
+  return result;
+}
+
+db_uint_t dbapi_hdel(const char *key, const char *field)
+{
+  DBRequest *request = create_request(DB_HDEL);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(field));
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_uint_t result = reply->data->value.uint_value;
+  free_reply(reply);
+  return result;
+}
+
+db_int_t dbapi_hincrby(const char *key, const char *field, db_int_t value)
+{
+  DBRequest *request = create_request(DB_HDEL);
+  add_request_arg(request, dbobj_create_string_with_dup(key));
+  add_request_arg(request, dbobj_create_string_with_dup(field));
+  add_request_arg(request, dbobj_create_int(value));
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
+  }
+  db_int_t result = reply->data->value.int_value;
   free_reply(reply);
   return result;
 }
