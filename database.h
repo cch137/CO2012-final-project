@@ -31,9 +31,9 @@ char *create_post(DBList *tags);
 // 呼叫者負責釋放傳回的字串陣列。
 DBList *get_post_tags(const char *tag_id);
 
-// 根據某個標籤取得貼文清單 (限制回傳數量 limit)，
+// 根據某個標籤取得貼文清單
 // 呼叫者需釋放傳回的陣列
-DBList *get_posts_by_tag(const char *tag_id, size_t limit);
+DBList *get_posts_by_tag(const char *tag_id);
 
 // 取得所有標籤的 OID。呼叫者需釋放回傳的陣列。
 // 呼叫者負責釋放傳回的字串陣列。
