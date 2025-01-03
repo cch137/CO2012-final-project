@@ -68,7 +68,7 @@ static void generate_oid(char *oid)
 // User 模組
 //----------------------------------
 
-// 取得符合 user:* pattern 的使用者 IDs，最多取 limit 筆。
+// 取得 使用者 IDs
 DBList *get_user_ids()
 {
   DBList *list = dbapi_keys();
