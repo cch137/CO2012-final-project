@@ -17,6 +17,7 @@
 #define USER_NAME_KEY "name"
 #define USER_ATAGS_KEY "a_tags"
 #define USER_NS_PREFIX "user:"
+#define POST_TAGS_KEY "tags"
 
 DBHash *main_ht = NULL;
 DBHash *expr_ht = NULL;
@@ -175,6 +176,47 @@ DBList *get_post_ids()
 
 char *create_post(DBList *tags)
 {
+  // 確保主 Hash Table 和過期表已初始化
+  if (!main_ht)
+  {
+    main_ht = ht_create();
+  }
+
+  if (!expr_ht)
+  {
+    expr_ht = ht_create();
+  }
+
+  // 生成貼文 OID
+  char oid[13];
+  generate_oid(oid);
+  char *post_id = (char *)malloc(strlen(POST_NS_PREFIX) + strlen(oid) + 1);
+  if (!post_id)
+    EXIT_ON_MEMORY_ERROR();
+  sprintf(post_id, "%s%s", POST_NS_PREFIX, oid);
+
+  // 創建貼文數據結構
+  DBHash *post_data = ht_create();
+
+  if (tags)
+  {
+    DBList *tags_copy = create_dblist();
+    DBListNode *curr = tags->head;
+    while (curr)
+    {
+      if (dbobj_is_string(curr->data))
+      {
+        rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      }
+      curr = curr->next;
+    }
+    hset(post_data, POST_TAGS_KEY, dbobj_create_list(tags_copy), NULL);
+  }
+
+  // 將貼文儲存到主 Hash Table
+  hset(main_ht, post_id, dbobj_create_hash(post_data), expr_ht);
+
+  return post_id;
 }
 
 DBList *get_post_tags(const char *tag_id)
