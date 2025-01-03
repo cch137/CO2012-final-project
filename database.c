@@ -106,30 +106,18 @@ char *create_user(const char *name, DBList *a_tags)
   char key[64];
   sprintf(key, "user:%s", oid);
 
-  // 準備 a_tags 的 JSON 字串
-  char *a_tags_json = NULL;
-  if (a_tags)
-  {
-    a_tags_json = db_list_to_json(a_tags); // 假設您有一個函式將 DBList 轉換為 JSON
-  }
+  // 新增
+  DBList atag[10];
+  sprintf(atag, "a_tag:%d", oid);
 
-  // 使用 HMSET 設定使用者的基本資訊
+  // 此處將一些欄位先設為預設值：actual_tags, predicted_tags, viewed_posts, liked_posts 等
   redisReply *reply = redisCommand(
       redis_conn,
-      "HMSET %s name %s actual_tags %s predicted_tags '{}' viewed_posts '[]' liked_posts '[]'",
+      "HMSET %s name %s actual_tags '{}' predicted_tags '{}' viewed_posts '[]' liked_posts '[]'",
       key,
-      name ? name : "",
-      a_tags_json ? a_tags_json : "'[]'");
-
+      name ? name : "");
   if (reply)
-  {
     freeReplyObject(reply);
-  }
-
-  if (a_tags_json)
-  {
-    free(a_tags_json);
-  }
 
   return strdup(oid);
 }
