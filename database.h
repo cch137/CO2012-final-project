@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "db/list.h"
+
 // 定義表示標籤與權重的結構
 typedef struct
 {
@@ -19,7 +21,7 @@ typedef struct
 // 取得所有使用者的 id。
 // 呼叫者負責釋放傳回的字串陣列。
 // 回傳值：包含所有使用者 OID 的字串陣列 (char**)， limit 回傳資料的最大筆數。
-char **get_user_ids(size_t limit);
+DBList *get_user_ids(size_t limit);
 
 // 計算使用者數量
 size_t count_users(void);
@@ -41,7 +43,7 @@ char *get_user_by_name(const char *name);
 
 // 取得該使用者發佈的所有貼文 OID 清單
 // 呼叫者需釋放傳回的陣列
-char **get_user_posts(const char *user_id, size_t *out_count);
+DBList *get_user_posts(const char *user_id, size_t *out_count);
 
 // 將 post 標記為該 user 已檢視 (同時增加 post 的 viewed 計數)
 bool mark_post_as_viewed_by_user(const char *user_id, const char *post_id);
@@ -54,7 +56,7 @@ bool mark_post_as_liked_by_user(const char *user_id, const char *post_id);
 //----------------------------------
 
 // 取得所有貼文的 OID。呼叫者需釋放回傳的陣列。
-char **get_post_ids(size_t *out_count);
+DBList *get_post_ids(size_t *out_count);
 
 // 計算貼文數量
 size_t count_posts(void);
@@ -72,7 +74,7 @@ bool delete_post(const char *post_id);
 //----------------------------------
 
 // 取得所有標籤的 OID。呼叫者需釋放回傳的陣列。
-char **get_tag_ids(size_t *out_count);
+DBList *get_tag_ids(size_t *out_count);
 
 // 計算標籤數量
 size_t count_tags(void);
@@ -101,7 +103,7 @@ bool post_decrease_tag_weight(const char *post_id, const char *tag_id, int decre
 // 根據某個標籤取得貼文清單 (限制回傳數量 limit)，
 // 傳回值依該標籤在貼文中的權重由大到小排序
 // 呼叫者需釋放傳回的陣列
-char **get_posts_by_tag(const char *tag_id, size_t limit, size_t *out_count);
+DBList *get_posts_by_tag(const char *tag_id, size_t limit, size_t *out_count);
 
 //----------------------------------
 // 其他功能

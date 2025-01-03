@@ -8,6 +8,14 @@
 #include <hiredis/hiredis.h>
 #include <ctype.h>
 
+#define USER_NS_PREFIX "user:"
+
+static bool starts_with(const char *str, const char *prefix)
+{
+  size_t prefix_len = strlen(prefix);
+  return strncmp(str, prefix, prefix_len) == 0;
+}
+
 // Redis 連接對象
 static redisContext *redis_conn = NULL;
 
@@ -58,33 +66,25 @@ static void generate_oid(char *oid)
 //----------------------------------
 
 // 取得符合 user:* pattern 的使用者 IDs，最多取 limit 筆。
-char **get_user_ids(size_t limit)
+DBList *get_user_ids(size_t limit)
 {
-  init_redis();
-  redisReply *reply = redisCommand(redis_conn, "SCAN 0 MATCH user:* COUNT %zu", limit);
-  if (!reply || reply->type != REDIS_REPLY_ARRAY || reply->elements < 2)
+  DBList *list = dbapi_keys();
+  DBList *user_ids = create_dblist();
+  DBListNode *curr = list->head;
+
+  while (curr && user_ids->length < limit)
   {
-    fprintf(stderr, "Failed to fetch user IDs.\n");
-    if (reply)
-      freeReplyObject(reply);
-    return NULL;
+    if (!dbobj_is_string(curr->data))
+      continue;
+    if (starts_with(curr->data->value.string, USER_NS_PREFIX))
+      rpush(user_ids, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    curr = curr->next;
   }
 
-  // SCAN 回傳結果結構：element[0] = 下一個 cursor、element[1] = 取得的 key 列表
-  redisReply *keys_array = reply->element[1];
-  size_t count = keys_array->elements;
+  free_dblist(list);
 
-  char **user_ids = malloc(sizeof(char *) * count);
-  for (size_t i = 0; i < count; i++)
-  {
-    // 跳過 "user:" 前綴
-    // 逐一把「user:xxxxx」轉成「xxxxx」
-    user_ids[i] = strdup(keys_array->element[i]->str + 5);
-  }
-
-  freeReplyObject(reply);
   return user_ids;
-}
+};
 
 size_t count_users(void) // 計算所有符合 user:* 的 key 數量。
 {
