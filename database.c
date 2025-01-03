@@ -93,17 +93,13 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
-  // Generate a unique ID for the user
   char *user_id = generate_unique_id(USER_NS_PREFIX);
 
-  // Create a hash structure to store user data
   DBHash *user_data = ht_create();
 
-  // Set the user's name if provided
   if (name && strlen(name) > 0)
     hset(user_data, USER_NAME_KEY, dbobj_create_string_with_dup(name), NULL);
 
-  // Set the user's interest tags (a_tags) if provided
   if (a_tags)
   {
     DBList *tags_copy = create_dblist();
@@ -117,10 +113,8 @@ char *create_user(const char *name, DBList *a_tags)
     hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
-  // Save the user data into the database
   hset(main_ht, user_id, dbobj_create_hash(user_data), expr_ht);
 
-  // Return the newly created user's ID
   return user_id;
 }
 
