@@ -16,3 +16,5 @@
 ## **TODO**
 
 - `create_dblistnode_with_string` 不需要 strdup
+
+- 解決命名混亂問題
