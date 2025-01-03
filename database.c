@@ -404,6 +404,44 @@ DBList *get_user_atags(const char *user_id)
 
 db_bool_t set_user_atags(const char *user_id, DBList *tags)
 {
+  if (!user_id || !main_ht || !tags)
+    return false;
+
+  // 從主 Hash Table 獲取使用者數據
+  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
+  if (!entry || !dbobj_is_hash(entry->data))
+    return false;
+
+  DBHash *user_data = entry->data->value.hash;
+
+  // 複製標籤列表，確保內存安全
+  DBList *tags_copy = create_dblist();
+  DBListNode *curr = tags->head;
+
+  while (curr)
+  {
+    if (dbobj_is_string(curr->data))
+    {
+      rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    }
+    curr = curr->next;
+  }
+
+  // 更新使用者數據中的興趣標籤
+  DBHashEntry *atags_entry = hget(user_data, USER_ATAGS_KEY, NULL);
+  if (atags_entry)
+  {
+    // 如果已有標籤，釋放舊的標籤數據
+    free_dblist(atags_entry->data->value.list);
+    atags_entry->data->value.list = tags_copy;
+  }
+  else
+  {
+    // 如果沒有標籤，新增標籤數據
+    hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
+  }
+
+  return true;
 }
 
 DBList *get_user_ptags(const char *user_id)
