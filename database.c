@@ -12,6 +12,8 @@
 #include "db/api.h"
 
 #define USER_NS_PREFIX "user:"
+#define POST_NS_PREFIX "post:"
+#define TAG_NS_PREFIX "tag:"
 
 static bool starts_with(const char *str, const char *prefix)
 {
