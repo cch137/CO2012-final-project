@@ -99,6 +99,22 @@ size_t count_users(void) // 計算所有符合 user:* 的 key 數量。
 
 DBList *get_post_ids()
 {
+  DBList *list = dbapi_keys();
+  DBList *post_ids = create_dblist();
+  DBListNode *curr = list->head;
+
+  while (curr)
+  {
+    if (!dbobj_is_string(curr->data))
+      continue;
+    if (starts_with(curr->data->value.string, USER_NS_PREFIX))
+      rpush(post_ids, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    curr = curr->next;
+  }
+
+  free_dblist(list);
+
+  return post_ids;
 }
 
 char *create_post(DBList *tags)
