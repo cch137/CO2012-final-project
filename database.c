@@ -118,6 +118,22 @@ DBList *get_posts_by_tag(const char *tag_id)
 
 DBList *get_tag_ids()
 {
+  DBList *list = dbapi_keys();
+  DBList *tag_ids = create_dblist();
+  DBListNode *curr = list->head;
+
+  while (curr)
+  {
+    if (!dbobj_is_string(curr->data))
+      continue;
+    if (starts_with(curr->data->value.string, USER_NS_PREFIX))
+      rpush(tag_ids, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    curr = curr->next;
+  }
+
+  free_dblist(list);
+
+  return tag_ids;
 }
 
 char *create_tag(const char *name)
