@@ -521,4 +521,13 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 // 清空整個資料庫
 void flush_all(void)
 {
+  // 確保主 Hash Table 和過期 Hash Table 已初始化
+  if (!main_ht)
+    main_ht = ht_create();
+  if (!expr_ht)
+    expr_ht = ht_create();
+
+  // 重置主 Hash Table 和過期 Hash Table
+  ht_reset(main_ht);
+  ht_reset(expr_ht);
 }
