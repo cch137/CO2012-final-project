@@ -107,7 +107,7 @@ DBList *get_post_ids()
   {
     if (!dbobj_is_string(curr->data))
       continue;
-    if (starts_with(curr->data->value.string, USER_NS_PREFIX))
+    if (starts_with(curr->data->value.string, POST_NS_PREFIX))
       rpush(post_ids, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
     curr = curr->next;
   }
@@ -142,7 +142,7 @@ DBList *get_tag_ids()
   {
     if (!dbobj_is_string(curr->data))
       continue;
-    if (starts_with(curr->data->value.string, USER_NS_PREFIX))
+    if (starts_with(curr->data->value.string, TAG_NS_PREFIX))
       rpush(tag_ids, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
     curr = curr->next;
   }
