@@ -257,7 +257,59 @@ DBList *get_post_tags(const char *post_id)
 
 DBList *get_posts_by_tag(const char *tag_id)
 {
+  if (!tag_id || !main_ht)
+    return NULL;
+
+  DBList *post_ids = dbapi_keys(); // 獲取所有的鍵值
+  DBList *posts_with_tag = create_dblist();
+  DBListNode *curr = post_ids->head;
+
+  while (curr)
+  {
+    if (!dbobj_is_string(curr->data))
+    {
+      curr = curr->next;
+      continue;
+    }
+
+    const char *post_id = curr->data->value.string;
+    DBHashEntry *entry = hget(main_ht, post_id, expr_ht);
+
+    if (!entry || !dbobj_is_hash(entry->data))
+    {
+      curr = curr->next;
+      continue;
+    }
+
+    DBHash *post_data = entry->data->value.hash;
+    DBHashEntry *tags_entry = hget(post_data, POST_TAGS_KEY, NULL);
+
+    if (!tags_entry || !dbobj_is_list(tags_entry->data))
+    {
+      curr = curr->next;
+      continue;
+    }
+
+    DBList *tags = tags_entry->data->value.list;
+    DBListNode *tag_node = tags->head;
+    while (tag_node)
+    {
+      if (dbobj_is_string(tag_node->data) &&
+          strcmp(tag_node->data->value.string, tag_id) == 0)
+      {
+        rpush(posts_with_tag, create_dblistnode_with_string(dbutil_strdup(post_id)));
+        break;
+      }
+      tag_node = tag_node->next;
+    }
+
+    curr = curr->next;
+  }
+
+  free_dblist(post_ids);
+  return posts_with_tag;
 }
+
 //----------------------------------
 // Tag 模組
 //----------------------------------
