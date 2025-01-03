@@ -371,6 +371,35 @@ char *create_tag(const char *name)
 
 DBList *get_user_atags(const char *user_id)
 {
+  if (!user_id || !main_ht)
+    return NULL;
+
+  // 從主 Hash Table 獲取使用者數據
+  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
+  if (!entry || !dbobj_is_hash(entry->data))
+    return NULL;
+
+  DBHash *user_data = entry->data->value.hash;
+
+  // 從使用者數據中獲取興趣標籤列表
+  DBHashEntry *atags_entry = hget(user_data, USER_ATAGS_KEY, NULL);
+  if (!atags_entry || !dbobj_is_list(atags_entry->data))
+    return NULL;
+
+  // 複製興趣標籤列表，確保調用者負責釋放內存
+  DBList *atags_copy = create_dblist();
+  DBListNode *curr = atags_entry->data->value.list->head;
+
+  while (curr)
+  {
+    if (dbobj_is_string(curr->data))
+    {
+      rpush(atags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    }
+    curr = curr->next;
+  }
+
+  return atags_copy;
 }
 
 db_bool_t set_user_atags(const char *user_id, DBList *tags)
