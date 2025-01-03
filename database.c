@@ -8,6 +8,7 @@
 #include <hiredis/hiredis.h>
 #include <ctype.h>
 
+#include "db/utils.h"
 #include "db/api.h"
 
 #define USER_NS_PREFIX "user:"
