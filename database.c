@@ -21,10 +21,10 @@ static bool starts_with(const char *str, const char *prefix)
   return strncmp(str, prefix, prefix_len) == 0;
 }
 
-// Redis 連接對象
+// Redis �����亙��鞊�
 static redisContext *redis_conn = NULL;
 
-// 初始化 Redis 連接
+// ���憪���� Redis ������
 static void init_redis()
 {
   if (!redis_conn)
@@ -38,7 +38,7 @@ static void init_redis()
   }
 }
 
-// 工具函數：檢查鍵的合法性
+// 撌亙�瑕�賣�賂��瑼Ｘ�仿�萇�����瘜����
 static bool is_valid_key(const char *key)
 {
   const char invalid_chars[] = "*:[]?\\";
@@ -53,12 +53,12 @@ static bool is_valid_key(const char *key)
   return true;
 }
 
-// 工具函數：生成唯一 OID
+// 撌亙�瑕�賣�賂����������臭�� OID
 static void generate_oid(char *oid)
 {
   const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   int timestamp = (int)time(NULL);
-  sprintf(oid, "%06X", timestamp); // 前 6 位為時間戳
+  sprintf(oid, "%06X", timestamp); // ��� 6 雿���箸��������
   for (int i = 0; i < 6; i++)
   {
     oid[6 + i] = charset[rand() % (sizeof(charset) - 1)];
@@ -67,10 +67,10 @@ static void generate_oid(char *oid)
 }
 
 //----------------------------------
-// User 模組
+// User 璅∠��
 //----------------------------------
 
-// 取得 使用者 IDs
+// ���敺� 雿輻�刻�� IDs
 DBList *get_user_ids()
 {
   DBList *list = dbapi_keys();
@@ -106,24 +106,33 @@ char *create_user(const char *name, DBList *a_tags)
   char key[64];
   sprintf(key, "user:%s", oid);
 
-  // 新增
+  // ��啣��
   DBList atag[10];
-  sprintf(atag, "a_tag:%f", oid);
+  sprintf(atag, "a_tag:%d", oid);
 
-  // 此處將一些欄位先設為預設值：actual_tags, predicted_tags, viewed_posts, liked_posts 等
-  redisReply *reply = redisCommand(
-      redis_conn,
-      "HMSET %s name %s actual_tags '{}' predicted_tags '{}' viewed_posts '[]' liked_posts '[]'",
-      key,
-      name ? name : "");
-  if (reply)
-    freeReplyObject(reply);
+  // Set the user's interest tags (a_tags) if provided
+  if (a_tags)
+  {
+    DBList *tags_copy = create_dblist();
+    DBListNode *curr = a_tags->head;
+    while (curr)
+    {
+      if (dbobj_is_string(curr->data))
+        rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      curr = curr->next;
+    }
+    hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
+  }
 
-  return strdup(oid);
+  // Save the user data into the database
+  hset(main_ht, user_id, dbobj_create_hash(user_data), expr_ht);
+
+  // Return the newly created user's ID
+  return user_id;
 }
 
 //----------------------------------
-// Post 模組
+// Post 璅∠��
 //----------------------------------
 
 DBList *get_post_ids()
@@ -158,7 +167,7 @@ DBList *get_posts_by_tag(const char *tag_id)
 {
 }
 //----------------------------------
-// Tag 模組
+// Tag 璅∠��
 //----------------------------------
 
 DBList *get_tag_ids()
@@ -201,7 +210,7 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
 }
 
-// 清空整個資料庫
+// 皜�蝛箸�游��鞈����摨�
 void flush_all(void)
 {
 }
