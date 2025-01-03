@@ -18,6 +18,7 @@
 #define USER_ATAGS_KEY "a_tags"
 #define USER_NS_PREFIX "user:"
 #define POST_TAGS_KEY "tags"
+#define USER_PTAGS_KEY "p_tags"
 
 DBHash *main_ht = NULL;
 DBHash *expr_ht = NULL;
@@ -446,10 +447,75 @@ db_bool_t set_user_atags(const char *user_id, DBList *tags)
 
 DBList *get_user_ptags(const char *user_id)
 {
+  if (!user_id || !main_ht)
+    return NULL;
+
+  // 從主 Hash Table 獲取使用者數據
+  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
+  if (!entry || !dbobj_is_hash(entry->data))
+    return NULL;
+
+  DBHash *user_data = entry->data->value.hash;
+
+  // 從使用者數據中獲取 PTags
+  DBHashEntry *ptags_entry = hget(user_data, USER_PTAGS_KEY, NULL);
+  if (!ptags_entry || !dbobj_is_list(ptags_entry->data))
+    return NULL;
+
+  // 複製標籤列表，確保調用者負責釋放內存
+  DBList *ptags_copy = create_dblist();
+  DBListNode *curr = ptags_entry->data->value.list->head;
+
+  while (curr)
+  {
+    if (dbobj_is_string(curr->data))
+    {
+      rpush(ptags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    }
+    curr = curr->next;
+  }
+
+  return ptags_copy;
 }
 
 db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
+  if (!user_id || !tags || !main_ht)
+    return false;
+
+  // 從主 Hash Table 獲取使用者數據
+  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
+  if (!entry || !dbobj_is_hash(entry->data))
+    return false;
+
+  DBHash *user_data = entry->data->value.hash;
+
+  // 創建一個新的標籤列表
+  DBList *tags_copy = create_dblist();
+  DBListNode *curr = tags->head;
+
+  while (curr)
+  {
+    if (dbobj_is_string(curr->data))
+    {
+      rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    }
+    curr = curr->next;
+  }
+
+  // 將新標籤列表存入使用者數據
+  DBHashEntry *ptags_entry = hget(user_data, USER_PTAGS_KEY, NULL);
+  if (ptags_entry)
+  {
+    free_dbobj(ptags_entry->data); // 清理舊數據
+    ptags_entry->data = dbobj_create_list(tags_copy);
+  }
+  else
+  {
+    hset(user_data, USER_PTAGS_KEY, dbobj_create_list(tags_copy), NULL);
+  }
+
+  return true;
 }
 
 // 清空整個資料庫
