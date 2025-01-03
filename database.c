@@ -29,23 +29,6 @@ static bool starts_with(const char *str, const char *prefix)
   return strncmp(str, prefix, prefix_len) == 0;
 }
 
-// Redis 連接對象
-static redisContext *redis_conn = NULL;
-
-// 初始化 Redis 連接
-static void init_redis()
-{
-  if (!redis_conn)
-  {
-    redis_conn = redisConnect("127.0.0.1", 6379);
-    if (redis_conn == NULL || redis_conn->err)
-    {
-      fprintf(stderr, "Error connecting to Redis: %s\n", redis_conn ? redis_conn->errstr : "Connection error");
-      exit(1);
-    }
-  }
-}
-
 // 工具函數：檢查鍵的合法性
 static bool is_valid_key(const char *key)
 {
