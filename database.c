@@ -252,6 +252,37 @@ DBList *get_tag_ids()
 
 char *create_tag(const char *name)
 {
+  // 確保主 Hash Table 和過期表已初始化
+  if (!main_ht)
+  {
+    main_ht = ht_create();
+  }
+
+  if (!expr_ht)
+  {
+    expr_ht = ht_create();
+  }
+
+  // 生成標籤 OID
+  char oid[13];
+  generate_oid(oid);
+  char *tag_id = (char *)malloc(strlen(TAG_NS_PREFIX) + strlen(oid) + 1);
+  if (!tag_id)
+    EXIT_ON_MEMORY_ERROR();
+  sprintf(tag_id, "%s%s", TAG_NS_PREFIX, oid);
+
+  // 創建標籤數據結構
+  DBHash *tag_data = ht_create();
+
+  if (name && strlen(name) > 0)
+  {
+    hset(tag_data, "name", dbobj_create_string_with_dup(name), NULL);
+  }
+
+  // 將標籤存入主 Hash Table
+  hset(main_ht, tag_id, dbobj_create_hash(tag_data), expr_ht);
+
+  return tag_id;
 }
 
 DBList *get_user_atags(const char *user_id)
