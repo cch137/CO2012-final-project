@@ -195,28 +195,21 @@ char *create_post(DBList *tags)
 
 DBList *get_post_tags(const char *post_id)
 {
-  if (!post_id)
+  if (!post_id || !main_ht)
     return NULL;
 
-  // 確保主 Hash Table 已初始化
-  if (!main_ht)
+  // 組合 post:tags 的鍵
+  char post_tags_key[strlen(post_id) + strlen(POST_TAGS_KEY) + 2];
+  sprintf(post_tags_key, "%s:%s", post_id, POST_TAGS_KEY);
+
+  // 使用資料庫 API 獲取 tags 的 List
+  DBList *tags_list = dbapi_lrange(post_tags_key, 0, DB_UINT_MAX);
+  if (!tags_list)
     return NULL;
 
-  // 從主 Hash Table 獲取貼文數據
-  DBHashEntry *entry = hget(main_ht, post_id, expr_ht);
-  if (!entry || !dbobj_is_hash(entry->data))
-    return NULL;
-
-  DBHash *post_data = entry->data->value.hash;
-
-  // 從貼文數據中獲取標籤列表
-  DBHashEntry *tags_entry = hget(post_data, POST_TAGS_KEY, NULL);
-  if (!tags_entry || !dbobj_is_list(tags_entry->data))
-    return NULL;
-
-  // 複製標籤列表，確保調用者負責釋放內存
+  // 確保返回的 tags 是一個新的複製品
   DBList *tags_copy = create_dblist();
-  DBListNode *curr = tags_entry->data->value.list->head;
+  DBListNode *curr = tags_list->head;
   while (curr)
   {
     if (dbobj_is_string(curr->data))
@@ -226,7 +219,8 @@ DBList *get_post_tags(const char *post_id)
     curr = curr->next;
   }
 
-  return tags_copy;
+  free_dblist(tags_list); // 釋放原始資料庫的返回結果
+  return tags_copy;       // 返回複製後的標籤列表
 }
 
 DBList *get_posts_by_tag(const char *tag_id)
