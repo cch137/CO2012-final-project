@@ -279,37 +279,54 @@ DBList *get_tag_ids()
 
 char *create_tag(const char *name)
 {
-  // 確保主 Hash Table 和過期表已初始化
+  // 確保資料庫初始化
   if (!main_ht)
-  {
     main_ht = ht_create();
-  }
 
   if (!expr_ht)
-  {
     expr_ht = ht_create();
-  }
 
-  // 生成標籤 OID
+  // 生成唯一 OID
   char oid[13];
   generate_oid(oid);
+
+  // 組合標籤的鍵，例如 "tag:abc123"
   char *tag_id = (char *)malloc(strlen(TAG_NS_PREFIX) + strlen(oid) + 1);
   if (!tag_id)
     EXIT_ON_MEMORY_ERROR();
   sprintf(tag_id, "%s%s", TAG_NS_PREFIX, oid);
 
-  // 創建標籤數據結構
-  DBHash *tag_data = ht_create();
-
+  // 儲存標籤名稱
   if (name && strlen(name) > 0)
   {
-    hset(tag_data, "name", dbobj_create_string_with_dup(name), NULL);
+    char tag_name_key[strlen(tag_id) + strlen(":name") + 1];
+    sprintf(tag_name_key, "%s:name", tag_id);
+
+    if (!dbapi_set(tag_name_key, name))
+    {
+      free(tag_id); // 清理已分配的記憶體
+      return NULL;  // 若儲存失敗，返回 NULL
+    }
   }
 
-  // 將標籤存入主 Hash Table
-  hset(main_ht, tag_id, dbobj_create_hash(tag_data), expr_ht);
+  // 初始化與此標籤相關聯的貼文列表
+  char tag_posts_key[strlen(tag_id) + strlen(":posts") + 1];
+  sprintf(tag_posts_key, "%s:posts", tag_id);
 
-  return tag_id;
+  if (!dbapi_lcreate(tag_posts_key))
+  {
+    // 若初始化失敗，清理標籤名稱
+    if (name && strlen(name) > 0)
+    {
+      char tag_name_key[strlen(tag_id) + strlen(":name") + 1];
+      sprintf(tag_name_key, "%s:name", tag_id);
+      dbapi_del(tag_name_key);
+    }
+    free(tag_id);
+    return NULL;
+  }
+
+  return tag_id; // 成功創建標籤，返回其 ID
 }
 
 DBList *get_user_atags(const char *user_id)
