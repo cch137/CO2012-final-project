@@ -360,35 +360,48 @@ db_bool_t set_user_atags(const char *user_id, DBList *tags)
 
 DBList *get_user_ptags(const char *user_id)
 {
-  if (!user_id || !main_ht)
+  // 檢查輸入有效性
+  if (!user_id || strlen(user_id) == 0)
+  {
+    fprintf(stderr, "Invalid user_id\n");
     return NULL;
+  }
 
-  // 從主 Hash Table 獲取使用者數據
-  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
-  if (!entry || !dbobj_is_hash(entry->data))
+  // 初始化 ptags 的鍵，例如 "user:12345:p_tags"
+  char ptags_key[strlen(user_id) + strlen(":p_tags") + 1];
+  sprintf(ptags_key, "%s:p_tags", user_id);
+
+  // 從資料庫取得 p_tags
+  DBObj *ptags_obj = dbapi_get(ptags_key);
+  if (!ptags_obj)
+  {
+    fprintf(stderr, "No p_tags found for user_id: %s\n", user_id);
+    return NULL; // 找不到 p_tags，回傳 NULL
+  }
+
+  // 檢查是否為 List 型態
+  if (!dbobj_is_list(ptags_obj))
+  {
+    fprintf(stderr, "p_tags for user_id: %s is not a valid List\n", user_id);
+    free_dbobj(ptags_obj);
     return NULL;
+  }
 
-  DBHash *user_data = entry->data->value.hash;
-
-  // 從使用者數據中獲取 PTags
-  DBHashEntry *ptags_entry = hget(user_data, USER_PTAGS_KEY, NULL);
-  if (!ptags_entry || !dbobj_is_list(ptags_entry->data))
-    return NULL;
-
-  // 複製標籤列表，確保調用者負責釋放內存
-  DBList *ptags_copy = create_dblist();
-  DBListNode *curr = ptags_entry->data->value.list->head;
-
+  // 複製 p_tags 列表
+  DBList *ptags_list = create_dblist();
+  DBListNode *curr = ptags_obj->value.list->head;
   while (curr)
   {
     if (dbobj_is_string(curr->data))
     {
-      rpush(ptags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      rpush(ptags_list, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
     }
     curr = curr->next;
   }
 
-  return ptags_copy;
+  // 清理記憶體並回傳複製的 p_tags
+  free_dbobj(ptags_obj);
+  return ptags_list;
 }
 
 db_bool_t set_user_ptags(const char *user_id, DBList *tags)
