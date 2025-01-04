@@ -182,18 +182,32 @@ void init_social_network(void)
   for (int i = 0; i < TOTAL_POSTS; ++i)
   {
     DBList *post_tags = create_dblist();
+    db_int_t selected_tag_index = (db_int_t)rand() % (db_int_t)post_tags->length;
     DBListNode *tag_id_node = tag_list->head;
-    while (tag_id_node)
+
+    while (selected_tag_index && tag_id_node)
     {
-      const char tag_id = tag_id_node->data->value.string;
-      const double raw_tag_prob = _get_tag_prob_from_dict(tag_dict, tag_id_node);
-      // 計算使用者獲得 tag 的概率，這裡會進行一些偏移操作。
-      // 稍微降低帖子出現熱門 tag 的機率，稍微提升帖子出現冷門 tag 的機率。
-      const double post_obtain_tag_prob = (raw_tag_prob + 0.5) / 2.0;
-      if (drand() < post_obtain_tag_prob)
-        rpush(post_tags, create_dblistnode_with_string(tag_id));
       tag_id_node = tag_id_node->next;
+      --selected_tag_index;
     }
+    if (!tag_id_node)
+      EXIT_ON_ERROR("Tag id node is NULL");
+    const char tag_id = tag_id_node->data->value.string;
+    rpush(post_tags, create_dblistnode_with_string(tag_id));
+
+    // 以下是讓 post 獲取多個 tag 的方法，但目前不採用
+    // while (tag_id_node)
+    // {
+    //   const char tag_id = tag_id_node->data->value.string;
+    //   const double raw_tag_prob = _get_tag_prob_from_dict(tag_dict, tag_id_node);
+    //   // 計算使用者獲得 tag 的概率，這裡會進行一些偏移操作。
+    //   // 稍微降低帖子出現熱門 tag 的機率，稍微提升帖子出現冷門 tag 的機率。
+    //   const double post_obtain_tag_prob = (raw_tag_prob + 0.5) / 2.0;
+    //   if (drand() < post_obtain_tag_prob)
+    //     rpush(post_tags, create_dblistnode_with_string(tag_id));
+    //   tag_id_node = tag_id_node->next;
+    // }
+
     create_post(post_tags);
     // TODO: 調查要不要 free post_tags
   }
