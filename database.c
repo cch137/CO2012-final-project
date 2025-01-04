@@ -91,18 +91,19 @@ char *create_user(const char *name, DBList *a_tags)
   if (!user_id)
     EXIT_ON_MEMORY_ERROR();
 
-  // 組合成完整的 user_id
-  sprintf(user_id, "%s%s", USER_NS_PREFIX, oid);
+  sprintf(user_id, "%s%s", USER_NS_PREFIX, oid); // 組合 user_id
 
   // 儲存 user:name
   if (name && strlen(name) > 0)
   {
     char user_name_key[strlen(user_id) + strlen(USER_NAME_KEY) + 2];
     sprintf(user_name_key, "%s:%s", user_id, USER_NAME_KEY);
+
     if (!dbapi_set(user_name_key, name))
     {
+      fprintf(stderr, "Failed to store user name for %s\n", user_id);
       free(user_id);
-      return NULL; // 若儲存失敗，回傳 NULL
+      return NULL;
     }
   }
 
@@ -119,15 +120,17 @@ char *create_user(const char *name, DBList *a_tags)
       {
         if (!dbapi_lpush(user_atags_key, curr->data->value.string))
         {
+          fprintf(stderr, "Failed to store user tags for %s\n", user_id);
+          dbapi_del(USER_NAME_KEY); // 清理已儲存的 name
           free(user_id);
-          return NULL; // 若儲存失敗，回傳 NULL
+          return NULL;
         }
       }
       curr = curr->next;
     }
   }
 
-  return user_id; // 回傳成功創建的 user_id
+  return user_id; // 成功返回 user_id
 }
 
 //----------------------------------
