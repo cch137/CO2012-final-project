@@ -325,10 +325,32 @@ DBList *get_user_atags(const char *user_id)
   if (!user_id)
     return NULL;
 
+  // 組合鍵名，例如 "user:abc123:atags"
   char user_atags_key[strlen(user_id) + strlen(USER_ATAGS_KEY) + 2];
   sprintf(user_atags_key, "%s:%s", user_id, USER_ATAGS_KEY);
 
-  return dbapi_lrange(user_atags_key, 0, -1); // 從資料庫中獲取完整的 List
+  // 從資料庫中獲取標籤列表
+  DBList *atags = dbapi_lrange(user_atags_key, 0, -1);
+  if (!atags)
+  {
+    fprintf(stderr, "Failed to fetch atags for user: %s\n", user_id);
+    return NULL; // 如果操作失敗，返回 NULL
+  }
+
+  // 複製標籤列表，確保返回的數據獨立於資料庫內部
+  DBList *atags_copy = create_dblist();
+  DBListNode *curr = atags->head;
+  while (curr)
+  {
+    if (dbobj_is_string(curr->data))
+    {
+      rpush(atags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+    }
+    curr = curr->next;
+  }
+
+  free_dblist(atags); // 釋放資料庫返回的列表
+  return atags_copy;  // 返回複製的標籤列表
 }
 
 db_bool_t set_user_atags(const char *user_id, DBList *tags)
@@ -371,37 +393,28 @@ DBList *get_user_ptags(const char *user_id)
   char ptags_key[strlen(user_id) + strlen(":p_tags") + 1];
   sprintf(ptags_key, "%s:p_tags", user_id);
 
-  // 從資料庫取得 p_tags
-  DBObj *ptags_obj = dbapi_get(ptags_key);
-  if (!ptags_obj)
+  // 使用資料庫高階 API 獲取 p_tags 列表
+  DBList *ptags = dbapi_lrange(ptags_key, 0, -1);
+  if (!ptags)
   {
     fprintf(stderr, "No p_tags found for user_id: %s\n", user_id);
-    return NULL; // 找不到 p_tags，回傳 NULL
-  }
-
-  // 檢查是否為 List 型態
-  if (!dbobj_is_list(ptags_obj))
-  {
-    fprintf(stderr, "p_tags for user_id: %s is not a valid List\n", user_id);
-    free_dbobj(ptags_obj);
     return NULL;
   }
 
-  // 複製 p_tags 列表
-  DBList *ptags_list = create_dblist();
-  DBListNode *curr = ptags_obj->value.list->head;
+  // 複製 p_tags 列表，確保返回的數據獨立於資料庫內部
+  DBList *ptags_copy = create_dblist();
+  DBListNode *curr = ptags->head;
   while (curr)
   {
     if (dbobj_is_string(curr->data))
     {
-      rpush(ptags_list, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      rpush(ptags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
     }
     curr = curr->next;
   }
 
-  // 清理記憶體並回傳複製的 p_tags
-  free_dbobj(ptags_obj);
-  return ptags_list;
+  free_dblist(ptags); // 清理資料庫返回的列表
+  return ptags_copy;  // 返回複製的列表
 }
 
 db_bool_t set_user_ptags(const char *user_id, DBList *tags)
