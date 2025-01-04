@@ -3,15 +3,94 @@
 current_pid=0
 last_modified_file=""
 last_modified_time_ms=0
+script_name=$(basename "$0")
+script_checksum=$(sha256sum "$0" | awk '{print $1}')
 
 DEBOUNCE_INTERVAL_MS=1500      # Debounce interval in milliseconds to prevent duplicate triggers
-WATCH_PATTERN='^(\./)?([^.][^/]*/)*[^.][^/]*\.(c|h)$'     # Updated pattern to ignore hidden directories
+WATCH_PATTERN='^(\./)?([^.][^/]*/)*[^.][^/]*\.(c|cpp|h)$'     # Updated pattern to ignore hidden directories
 OUTPUT_EXECUTABLE="main"       # Name of the output executable
 ENTRY_POINT="main"             # Default entry point
 
+# Files to ignore during compilation
+ignore_files=("s_algorithm.c" "sin.c" "db_test.c")
+
+# Function to check and install inotify-tools if necessary
+function check_inotify {
+    if ! command -v inotifywait &> /dev/null; then
+        echo -e "\e[41;37minotifywait not found. Attempting to install...\e[0m"
+        if [ -f "/etc/os-release" ]; then
+            . /etc/os-release
+            case "$ID" in
+                ubuntu|debian)
+                    if command -v apt &> /dev/null; then
+                        sudo apt update && sudo apt install -y inotify-tools || {
+                            echo -e "\e[41;37mFailed to install inotify-tools. Check your permissions.\e[0m";
+                            exit 1;
+                        }
+                    else
+                        echo -e "\e[41;37mPackage manager apt not found. Please install inotify-tools manually.\e[0m"
+                        exit 1
+                    fi
+                    ;;
+                centos|fedora|rhel)
+                    if command -v yum &> /dev/null; then
+                        sudo yum install -y inotify-tools || {
+                            echo -e "\e[41;37mFailed to install inotify-tools. Check your permissions.\e[0m";
+                            exit 1;
+                        }
+                    elif command -v dnf &> /dev/null; then
+                        sudo dnf install -y inotify-tools || {
+                            echo -e "\e[41;37mFailed to install inotify-tools. Check your permissions.\e[0m";
+                            exit 1;
+                        }
+                    else
+                        echo -e "\e[41;37mPackage manager yum/dnf not found. Please install inotify-tools manually.\e[0m"
+                        exit 1
+                    fi
+                    ;;
+                *)
+                    echo -e "\e[41;37mUnsupported OS. Please install inotify-tools manually.\e[0m"
+                    exit 1
+                    ;;
+            esac
+        else
+            echo -e "\e[41;37mUnable to detect OS. Please install inotify-tools manually.\e[0m"
+            exit 1
+        fi
+    fi
+}
+
+# Function to dynamically detect entry points
+function detect_entry_points {
+    local detected_files=( $(grep -Pl "^\s*int\s+main\s*\(" *.c *.cpp 2>/dev/null) )
+    if [ ${#detected_files[@]} -eq 0 ]; then
+        echo -e "\e[41;37mNo files with main function detected. Exiting.\e[0m"
+        exit 1
+    fi
+
+    # Prioritize main.c or main.cpp
+    local prioritized_files=()
+    for file in "main.c" "main.cpp"; do
+        if [[ " ${detected_files[@]} " =~ " $file " ]]; then
+            prioritized_files+=("$file")
+        fi
+    done
+
+    # Append remaining files to the list
+    for file in "${detected_files[@]}"; do
+        if [[ ! " ${prioritized_files[@]} " =~ " $file " ]]; then
+            prioritized_files+=("$file")
+        fi
+    done
+
+    echo "Detected files with main function: ${prioritized_files[*]}"
+    echo ""
+    options=(${prioritized_files[@]})
+}
+
 # Function to display the selection menu with arrow keys
 function select_entry_point {
-    local options=("main" "test")
+    detect_entry_points
     local selected=0
 
     while true; do
@@ -51,20 +130,28 @@ function select_entry_point {
     done
 
     ENTRY_POINT="${options[$selected]}"
-    OUTPUT_EXECUTABLE="$ENTRY_POINT"
+    OUTPUT_EXECUTABLE="${ENTRY_POINT%%.*}"
 
     echo -e "\n\e[44;37mEntry point selected: $ENTRY_POINT\e[0m\n"
 }
 
 function compile_and_run {
-    # Filter .c files based on the selected entry point
-    if [ "$ENTRY_POINT" == "main" ]; then
-        c_files=$(find . -type f -name "*.c" ! -path "*/\.*/*" ! -name ".*" ! -name "test.c" -print | tr '\n' ' ')
-    else
-        c_files=$(find . -type f -name "*.c" ! -path "*/\.*/*" ! -name ".*" ! -name "main.c" -print | tr '\n' ' ')
-    fi
+    # Find .c files while excluding ignored files and files with other entry points
+    c_files=$(find . -type f -name "*.c" ! -path "*/\.*/*" ! -name ".*" ! -name "$ENTRY_POINT")
 
-    compile_command="gcc -o $OUTPUT_EXECUTABLE $c_files -lhiredis"  # Build command
+    # Remove ignored files from the file list
+    for ignore in "${ignore_files[@]}"; do
+        c_files=$(echo "$c_files" | grep -v "$ignore")
+    done
+
+    # Exclude other entry point files
+    for entry in "${options[@]}"; do
+        if [ "$entry" != "$ENTRY_POINT" ]; then
+            c_files=$(echo "$c_files" | grep -v "$entry")
+        fi
+    done
+
+    compile_command="gcc -o $OUTPUT_EXECUTABLE $ENTRY_POINT $c_files -lhiredis"  # Build command
 
     # Terminate the previous process if it's still running
     if [ $current_pid -ne 0 ] && kill -0 $current_pid 2>/dev/null; then
@@ -81,6 +168,19 @@ function compile_and_run {
     else
         echo -e "\n\e[41;37mCompilation failed. Skipping execution.\e[0m\n"
     fi
+}
+
+function monitor_script {
+    while true; do
+        sleep 1
+        current_checksum=$(sha256sum "$0" | awk '{print $1}')
+        if [ "$current_checksum" != "$script_checksum" ]; then
+            echo -e "\n\e[41;37m$script_name has been modified. Monitoring task has been terminated.\e[0m\n"
+            kill $current_pid 2>/dev/null
+            pkill -P $$
+            exit 1
+        fi
+    done
 }
 
 function monitor_files {
@@ -108,8 +208,14 @@ function monitor_files {
     done
 }
 
+# Check if inotify-tools is installed
+check_inotify
+
 # Handle exit to clean up background processes
-trap "kill $current_pid 2>/dev/null" EXIT
+trap "kill $current_pid 2>/dev/null; pkill -P $$" EXIT
+
+# Start monitoring the script in the background
+monitor_script &
 
 # Select the entry point before monitoring files
 select_entry_point
