@@ -71,8 +71,11 @@ void test_dbutil_match_keys()
 
 int main()
 {
-  // test_dbutil_match_keys();
-  users_test();
+  printf("Tests start.\n");
+
+  test_dbutil_match_keys();
+
+  printf("Tests done!\n");
 
   return 0;
 }

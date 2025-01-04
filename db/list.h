@@ -10,7 +10,7 @@ void break_dblistnodes(DBListNode *left_node, DBListNode *right_node);
 DBListNode *create_dblistnode(DBObj *data);
 
 // Creates a new node for a doubly linked list with specified data
-DBListNode *create_dblistnode_with_string(char *data);
+DBListNode *create_dblistnode_with_string(const char *data);
 
 // Initializes a new, empty doubly linked list
 DBList *create_dblist();

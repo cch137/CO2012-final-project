@@ -109,7 +109,7 @@ void trim_ptags(DBList *ptags)
 }
 
 // only use in init_social_network
-static double _get_tag_prob_from_dict(const DBHash *tag_dict, const DBListNode *tag_id_node)
+static double _get_tag_prob_from_dict(DBHash *tag_dict, DBListNode *tag_id_node)
 {
   const char *tag_id = tag_id_node->data->value.string;
   if (!tag_id)
@@ -163,12 +163,12 @@ void init_social_network(void)
       const double again_tag_prob = _get_tag_prob_from_dict(tag_dict, tag_id_node);
       if (drand() < again_tag_prob)
       {
-        const char tag_id = tag_id_node->data->value.string;
+        const char *tag_id = tag_id_node->data->value.string;
         const double tag_weight = drand(); // 計算使用者此 a_tag 的權重
-        const TagWithWeight *tag_with_weight = create_tag_with_weight(tag_id, tag_weight);
-        const char *a_tag_string = serialize_tag_with_weight(tag_with_weight);
+        TagWithWeight *tag_with_w = create_tag_with_weight(tag_id, tag_weight);
+        const char *a_tag_string = serialize_tag_with_weight(tag_with_w);
         rpush(user_a_tags, create_dblistnode_with_string(a_tag_string));
-        free_tag_with_weight(tag_with_weight);
+        free_tag_with_weight(tag_with_w);
       }
       tag_id_node = tag_id_node->next;
     }
@@ -192,7 +192,7 @@ void init_social_network(void)
     }
     if (!tag_id_node)
       EXIT_ON_ERROR("Tag id node is NULL");
-    const char tag_id = tag_id_node->data->value.string;
+    const char *tag_id = tag_id_node->data->value.string;
     rpush(post_tags, create_dblistnode_with_string(tag_id));
 
     // 以下是讓 post 獲取多個 tag 的方法，但目前不採用
@@ -218,10 +218,10 @@ void init_social_network(void)
   return;
 }
 
-static double calculate_post_like_probability(const char post_id, const DBList *a_tags)
+static double calculate_post_like_probability(const char *post_id, DBList *a_tags)
 {
   double like_probability = 0;
-  const DBList *post_tags = get_post_tags(post_id);
+  DBList *post_tags = get_post_tags(post_id);
 
   DBListNode *post_tag_node = post_tags->head;
   while (post_tag_node)
@@ -230,7 +230,8 @@ static double calculate_post_like_probability(const char post_id, const DBList *
     DBListNode *a_tag_node = a_tags->head;
     while (a_tag_node)
     {
-      const TagWithWeight *tag_with_weight = parse_tag_with_weight(a_tag_node);
+      const char *a_tag_id = a_tag_node->data->value.string;
+      TagWithWeight *tag_with_weight = parse_tag_with_weight(a_tag_id);
       // 帖文具備 user 的 a_tag，增加概率
       if (strcmp(tag_with_weight->id, post_tag_id) == 0)
       {
@@ -248,7 +249,7 @@ end:
   return like_probability > 1 ? 1 : like_probability;
 }
 
-DBHash *get_user_feedback(const char *user_id, const DBList *post_ids)
+DBHash *get_user_feedback(const char *user_id, DBList *post_ids)
 {
   DBList *user_atags = get_user_atags(user_id);
   DBHash *likes_dict = ht_create();
@@ -269,16 +270,16 @@ DBHash *get_user_feedback(const char *user_id, const DBList *post_ids)
   return likes_dict;
 }
 
-DBHash *get_popular_feedback(const DBList *post_ids)
+DBHash *get_popular_feedback(DBList *post_ids)
 {
-  const DBList *user_ids = get_user_ids();
+  DBList *user_ids = get_user_ids();
   DBHash *users_likes_dict = ht_create();
 
   DBListNode *user_id_node = user_ids->head;
   while (user_id_node)
   {
     const char *user_id = user_id_node->data->value.string;
-    const DBHash *user_likes_dict = get_user_feedback(user_id, post_ids);
+    DBHash *user_likes_dict = get_user_feedback(user_id, post_ids);
 
     DBListNode *post_id_node = post_ids->head;
     while (post_id_node)
@@ -304,13 +305,13 @@ void run_simulations(
     RecommandPostsFunc recommanded_posts_func,
     AggregatePTagsFunc aggregate_func)
 {
-  const n = iteration_count;
-  const DBList *user_ids = get_user_ids();
+  const size_t n = iteration_count;
+  DBList *user_ids = get_user_ids();
 
   {
-    const DBList *post_ids = get_post_ids();
-    const DBHash *likes_dict = get_popular_feedback(post_ids);
-    const DBHash *ptag_dict = ht_create();
+    DBList *post_ids = get_post_ids();
+    DBHash *likes_dict = get_popular_feedback(post_ids);
+    DBHash *ptag_dict = ht_create();
 
     // 把 likes_dict 轉換成 ptag_dict
     DBListNode *post_id_node = post_ids->head;
@@ -320,7 +321,7 @@ void run_simulations(
       const DBHashEntry *post_liked_entry = hget(likes_dict, post_id, NULL);
       dbobj_string_to_int(post_liked_entry->data);
       const int post_liked_count = post_liked_entry->data->value.int_value;
-      const DBList *post_tags = get_post_tags(post_id);
+      DBList *post_tags = get_post_tags(post_id);
       DBListNode *tag_node = post_tags->head;
       while (tag_node)
       {
@@ -335,17 +336,19 @@ void run_simulations(
     free_dblist(post_ids);
 
     // 把 ptag_dict 轉換成 popular_ptags
-    const DBList *popular_ptags = create_dblist();
-    const DBList *ptag_ids = ht_keys(ptag_dict, NULL);
+    DBList *popular_ptags = create_dblist();
+    DBList *ptag_ids = ht_keys(ptag_dict, NULL);
     DBListNode *ptag_id_node = ptag_ids->head;
     while (ptag_id_node)
     {
       const char *ptag_id = ptag_id_node->data->value.string;
       const DBHashEntry *ptag_entry = hget(ptag_dict, ptag_id, NULL);
       const int ptag_w = ptag_entry->data->value.int_value;
-      const TagWithWeight *tag_with_weight = create_tag_with_weight(ptag_id, ptag_w);
-      rpush(popular_ptags, serialize_tag_with_weight(tag_with_weight));
-      free_tag_with_weight(tag_with_weight);
+      TagWithWeight *tag_with_w = create_tag_with_weight(ptag_id, ptag_w);
+      char *serialized_ptags = serialize_tag_with_weight(tag_with_w);
+      rpush(popular_ptags, create_dblistnode_with_string(serialized_ptags));
+      free(serialized_ptags);
+      free_tag_with_weight(tag_with_w);
       ptag_id_node = ptag_id_node->next;
     }
     trim_ptags(popular_ptags);
@@ -371,9 +374,9 @@ void run_simulations(
     while (user_id_node)
     {
       const char *user_id = user_id_node->data->value.string;
-      const DBList *user_p_tags = get_user_ptags(user_id);
-      const DBList *post_ids = recommanded_posts_func(user_id, posts_count, i, n);
-      const DBHash *likes_dict = get_user_feedback(user_id, post_ids);
+      DBList *user_p_tags = get_user_ptags(user_id);
+      DBList *post_ids = recommanded_posts_func(user_p_tags, posts_count, i, n);
+      DBHash *likes_dict = get_user_feedback(user_id, post_ids);
       aggregate_func(user_p_tags, likes_dict, i, n);
       set_user_ptags(user_id, user_p_tags);
       // TODO: 調查要不要 free user_p_tags

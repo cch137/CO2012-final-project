@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-<<<<<<< HEAD
 
-// °²³]¦³¥H¤U¨ç¦¡«Å§i©Mµ²ºc
+// ï¿½ï¿½ï¿½]ï¿½ï¿½ï¿½Hï¿½Uï¿½ç¦¡ï¿½Å§iï¿½Mï¿½ï¿½ï¿½c
 typedef struct DBListNode
 {
   void *data;
@@ -21,7 +20,7 @@ DBListNode *create_dblistnode_with_string(const char *str);
 void rpush(DBList *list, DBListNode *node);
 char *create_user(const char *name, DBList *a_tags);
 
-// ¼ÒÀÀ¨ç¦¡¹ê²{
+// ï¿½ï¿½ï¿½ï¿½ï¿½ç¦¡ï¿½ï¿½{
 DBList *create_dblist()
 {
   DBList *list = (DBList *)malloc(sizeof(DBList));
@@ -58,10 +57,10 @@ void rpush(DBList *list, DBListNode *node)
   }
 }
 
-// ´ú¸Õµ{¦¡¤J¤f
+// ï¿½ï¿½ï¿½Õµ{ï¿½ï¿½ï¿½Jï¿½f
 int main()
 {
-  // ·Ç³Æ¤Þ¼Æ
+  // ï¿½Ç³Æ¤Þ¼ï¿½
   const char *name = "example_user";
   DBList *a_tags = create_dblist();
   if (a_tags)
@@ -71,7 +70,7 @@ int main()
     rpush(a_tags, create_dblistnode_with_string("tag3"));
   }
 
-  // ©I¥s create_user ¨ç¦¡
+  // ï¿½Iï¿½s create_user ï¿½ç¦¡
   char *user_id = create_user(name, a_tags);
   if (user_id)
   {
@@ -83,18 +82,17 @@ int main()
     printf("Failed to create user.\n");
   }
 
-  // ²M²z°O¾ÐÅé
-  // ²M²z¦Cªí¸`ÂI»P¸ê®Æ
+  // ï¿½Mï¿½zï¿½Oï¿½ï¿½ï¿½ï¿½
+  // ï¿½Mï¿½zï¿½Cï¿½ï¿½ï¿½`ï¿½Iï¿½Pï¿½ï¿½ï¿½
   DBListNode *curr = a_tags->head;
   while (curr)
   {
     DBListNode *next = curr->next;
-    free(curr->data); // °²³] data ¬O¤À°tªº¦r¦ê
+    free(curr->data); // ï¿½ï¿½ï¿½] data ï¿½Oï¿½ï¿½ï¿½tï¿½ï¿½ï¿½rï¿½ï¿½
     free(curr);
     curr = next;
   }
-  free(a_tags); // ²M²z¦Cªí¥»¨­
-=======
+  free(a_tags); // ï¿½Mï¿½zï¿½Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 #include "database.h"
 
 #define USER_NS_PREFIX "user:"
@@ -104,137 +102,136 @@ int main()
 #define USER_ATAGS_KEY "a_tags"
 #define USER_NS_PREFIX "user:"
 
-DBHash *main_ht = NULL;
-DBHash *expr_ht = NULL;
+  DBHash *main_ht = NULL;
+  DBHash *expr_ht = NULL;
 
-// ´ú¸Õµ²ªG¿é¥X
-void assert_test(const char *test_name, int condition)
-{
-  if (condition)
+  // ï¿½ï¿½ï¿½Õµï¿½ï¿½Gï¿½ï¿½X
+  void assert_test(const char *test_name, int condition)
   {
-    printf("[PASS] %s\n", test_name);
-  }
-  else
-  {
-    printf("[FAIL] %s\n", test_name);
-  }
-}
-
-// ´ú¸Õ create_user ¨ç¦¡
-void test_create_user()
-{
-  // ´ú¸Õ 1: ³Ð«Ø±a¦³ name ©M a_tags ªº¨Ï¥ÎªÌ
-  DBList *a_tags1 = create_dblist();
-  rpush(a_tags1, create_dblistnode_with_string("tag1"));
-  rpush(a_tags1, create_dblistnode_with_string("tag2"));
-
-  char *user_id1 = create_user("Alice", a_tags1);
-
-  assert_test("Test 1: User ID is not NULL", user_id1 != NULL);
-
-  // ÅçÃÒ¨Ï¥ÎªÌ¬O§_¦¨¥\²K¥[¨ì main_ht
-  DBHashEntry *user_entry1 = hget(main_ht, user_id1, expr_ht);
-  assert_test("Test 1: User entry exists in main_ht", user_entry1 != NULL);
-
-  if (user_entry1 && dbobj_is_hash(user_entry1->data))
-  {
-    DBHash *user_data1 = user_entry1->data->value.hash;
-
-    // ÅçÃÒ name
-    DBHashEntry *name_entry = hget(user_data1, USER_NAME_KEY, NULL);
-    assert_test("Test 1: User name exists", name_entry != NULL);
-    if (name_entry)
+    if (condition)
     {
-      assert_test("Test 1: User name is correct", strcmp(name_entry->data->value.string, "Alice") == 0);
+      printf("[PASS] %s\n", test_name);
     }
-
-    // ÅçÃÒ a_tags
-    DBHashEntry *atags_entry = hget(user_data1, USER_ATAGS_KEY, NULL);
-    assert_test("Test 1: User a_tags exists", atags_entry != NULL);
-    if (atags_entry)
+    else
     {
-      DBList *tags = atags_entry->data->value.list;
-      assert_test("Test 1: User a_tags length is correct", tags->length == 2);
+      printf("[FAIL] %s\n", test_name);
     }
   }
 
-  free(user_id1);
-  free_dblist(a_tags1);
-
-  // ´ú¸Õ 2: ³Ð«ØµL name ªº¨Ï¥ÎªÌ
-  char *user_id2 = create_user(NULL, NULL);
-  assert_test("Test 2: User ID is not NULL", user_id2 != NULL);
-
-  // ÅçÃÒ¨Ï¥ÎªÌ¬O§_¦¨¥\²K¥[¨ì main_ht
-  DBHashEntry *user_entry2 = hget(main_ht, user_id2, expr_ht);
-  assert_test("Test 2: User entry exists in main_ht", user_entry2 != NULL);
-
-  if (user_entry2 && dbobj_is_hash(user_entry2->data))
+  // ï¿½ï¿½ï¿½ï¿½ create_user ï¿½ç¦¡
+  void test_create_user()
   {
-    DBHash *user_data2 = user_entry2->data->value.hash;
+    // ï¿½ï¿½ï¿½ï¿½ 1: ï¿½Ð«Ø±aï¿½ï¿½ name ï¿½M a_tags ï¿½ï¿½ï¿½Ï¥Îªï¿½
+    DBList *a_tags1 = create_dblist();
+    rpush(a_tags1, create_dblistnode_with_string("tag1"));
+    rpush(a_tags1, create_dblistnode_with_string("tag2"));
 
-    // ÅçÃÒ name ¤£¦s¦b
-    DBHashEntry *name_entry2 = hget(user_data2, USER_NAME_KEY, NULL);
-    assert_test("Test 2: User name does not exist", name_entry2 == NULL);
+    char *user_id1 = create_user("Alice", a_tags1);
 
-    // ÅçÃÒ a_tags ¤£¦s¦b
-    DBHashEntry *atags_entry2 = hget(user_data2, USER_ATAGS_KEY, NULL);
-    assert_test("Test 2: User a_tags does not exist", atags_entry2 == NULL);
-  }
+    assert_test("Test 1: User ID is not NULL", user_id1 != NULL);
 
-  free(user_id2);
+    // ï¿½ï¿½ï¿½Ò¨Ï¥ÎªÌ¬Oï¿½_ï¿½ï¿½ï¿½\ï¿½Kï¿½[ï¿½ï¿½ main_ht
+    DBHashEntry *user_entry1 = hget(main_ht, user_id1, expr_ht);
+    assert_test("Test 1: User entry exists in main_ht", user_entry1 != NULL);
 
-  // ´ú¸Õ 3: ³Ð«Ø±aªÅ name ªº¨Ï¥ÎªÌ
-  char *user_id3 = create_user("", NULL);
-  assert_test("Test 3: User ID is not NULL", user_id3 != NULL);
-
-  // ÅçÃÒ¨Ï¥ÎªÌ¬O§_¦¨¥\²K¥[¨ì main_ht
-  DBHashEntry *user_entry3 = hget(main_ht, user_id3, expr_ht);
-  assert_test("Test 3: User entry exists in main_ht", user_entry3 != NULL);
-
-  if (user_entry3 && dbobj_is_hash(user_entry3->data))
-  {
-    DBHash *user_data3 = user_entry3->data->value.hash;
-
-    // ÅçÃÒ name ¤£¦s¦b
-    DBHashEntry *name_entry3 = hget(user_data3, USER_NAME_KEY, NULL);
-    assert_test("Test 3: User name does not exist", name_entry3 == NULL);
-  }
-
-  free(user_id3);
-
-  // ´ú¸Õ 4: ³Ð«Ø±aªÅ a_tags ªº¨Ï¥ÎªÌ
-  DBList *a_tags4 = create_dblist();
-  char *user_id4 = create_user("Bob", a_tags4);
-  assert_test("Test 4: User ID is not NULL", user_id4 != NULL);
-
-  // ÅçÃÒ¨Ï¥ÎªÌ¬O§_¦¨¥\²K¥[¨ì main_ht
-  DBHashEntry *user_entry4 = hget(main_ht, user_id4, expr_ht);
-  assert_test("Test 4: User entry exists in main_ht", user_entry4 != NULL);
-
-  if (user_entry4 && dbobj_is_hash(user_entry4->data))
-  {
-    DBHash *user_data4 = user_entry4->data->value.hash;
-
-    // ÅçÃÒ name
-    DBHashEntry *name_entry4 = hget(user_data4, USER_NAME_KEY, NULL);
-    assert_test("Test 4: User name exists", name_entry4 != NULL);
-    if (name_entry4)
+    if (user_entry1 && dbobj_is_hash(user_entry1->data))
     {
-      assert_test("Test 4: User name is correct", strcmp(name_entry4->data->value.string, "Bob") == 0);
+      DBHash *user_data1 = user_entry1->data->value.hash;
+
+      // ï¿½ï¿½ï¿½ï¿½ name
+      DBHashEntry *name_entry = hget(user_data1, USER_NAME_KEY, NULL);
+      assert_test("Test 1: User name exists", name_entry != NULL);
+      if (name_entry)
+      {
+        assert_test("Test 1: User name is correct", strcmp(name_entry->data->value.string, "Alice") == 0);
+      }
+
+      // ï¿½ï¿½ï¿½ï¿½ a_tags
+      DBHashEntry *atags_entry = hget(user_data1, USER_ATAGS_KEY, NULL);
+      assert_test("Test 1: User a_tags exists", atags_entry != NULL);
+      if (atags_entry)
+      {
+        DBList *tags = atags_entry->data->value.list;
+        assert_test("Test 1: User a_tags length is correct", tags->length == 2);
+      }
     }
 
-    // ÅçÃÒ a_tags ¤£¦s¦b
-    DBHashEntry *atags_entry4 = hget(user_data4, USER_ATAGS_KEY, NULL);
-    assert_test("Test 4: User a_tags does not exist", atags_entry4 == NULL);
+    free(user_id1);
+    free_dblist(a_tags1);
+
+    // ï¿½ï¿½ï¿½ï¿½ 2: ï¿½Ð«ØµL name ï¿½ï¿½ï¿½Ï¥Îªï¿½
+    char *user_id2 = create_user(NULL, NULL);
+    assert_test("Test 2: User ID is not NULL", user_id2 != NULL);
+
+    // ï¿½ï¿½ï¿½Ò¨Ï¥ÎªÌ¬Oï¿½_ï¿½ï¿½ï¿½\ï¿½Kï¿½[ï¿½ï¿½ main_ht
+    DBHashEntry *user_entry2 = hget(main_ht, user_id2, expr_ht);
+    assert_test("Test 2: User entry exists in main_ht", user_entry2 != NULL);
+
+    if (user_entry2 && dbobj_is_hash(user_entry2->data))
+    {
+      DBHash *user_data2 = user_entry2->data->value.hash;
+
+      // ï¿½ï¿½ï¿½ï¿½ name ï¿½ï¿½ï¿½sï¿½b
+      DBHashEntry *name_entry2 = hget(user_data2, USER_NAME_KEY, NULL);
+      assert_test("Test 2: User name does not exist", name_entry2 == NULL);
+
+      // ï¿½ï¿½ï¿½ï¿½ a_tags ï¿½ï¿½ï¿½sï¿½b
+      DBHashEntry *atags_entry2 = hget(user_data2, USER_ATAGS_KEY, NULL);
+      assert_test("Test 2: User a_tags does not exist", atags_entry2 == NULL);
+    }
+
+    free(user_id2);
+
+    // ï¿½ï¿½ï¿½ï¿½ 3: ï¿½Ð«Ø±aï¿½ï¿½ name ï¿½ï¿½ï¿½Ï¥Îªï¿½
+    char *user_id3 = create_user("", NULL);
+    assert_test("Test 3: User ID is not NULL", user_id3 != NULL);
+
+    // ï¿½ï¿½ï¿½Ò¨Ï¥ÎªÌ¬Oï¿½_ï¿½ï¿½ï¿½\ï¿½Kï¿½[ï¿½ï¿½ main_ht
+    DBHashEntry *user_entry3 = hget(main_ht, user_id3, expr_ht);
+    assert_test("Test 3: User entry exists in main_ht", user_entry3 != NULL);
+
+    if (user_entry3 && dbobj_is_hash(user_entry3->data))
+    {
+      DBHash *user_data3 = user_entry3->data->value.hash;
+
+      // ï¿½ï¿½ï¿½ï¿½ name ï¿½ï¿½ï¿½sï¿½b
+      DBHashEntry *name_entry3 = hget(user_data3, USER_NAME_KEY, NULL);
+      assert_test("Test 3: User name does not exist", name_entry3 == NULL);
+    }
+
+    free(user_id3);
+
+    // ï¿½ï¿½ï¿½ï¿½ 4: ï¿½Ð«Ø±aï¿½ï¿½ a_tags ï¿½ï¿½ï¿½Ï¥Îªï¿½
+    DBList *a_tags4 = create_dblist();
+    char *user_id4 = create_user("Bob", a_tags4);
+    assert_test("Test 4: User ID is not NULL", user_id4 != NULL);
+
+    // ï¿½ï¿½ï¿½Ò¨Ï¥ÎªÌ¬Oï¿½_ï¿½ï¿½ï¿½\ï¿½Kï¿½[ï¿½ï¿½ main_ht
+    DBHashEntry *user_entry4 = hget(main_ht, user_id4, expr_ht);
+    assert_test("Test 4: User entry exists in main_ht", user_entry4 != NULL);
+
+    if (user_entry4 && dbobj_is_hash(user_entry4->data))
+    {
+      DBHash *user_data4 = user_entry4->data->value.hash;
+
+      // ï¿½ï¿½ï¿½ï¿½ name
+      DBHashEntry *name_entry4 = hget(user_data4, USER_NAME_KEY, NULL);
+      assert_test("Test 4: User name exists", name_entry4 != NULL);
+      if (name_entry4)
+      {
+        assert_test("Test 4: User name is correct", strcmp(name_entry4->data->value.string, "Bob") == 0);
+      }
+
+      // ï¿½ï¿½ï¿½ï¿½ a_tags ï¿½ï¿½ï¿½sï¿½b
+      DBHashEntry *atags_entry4 = hget(user_data4, USER_ATAGS_KEY, NULL);
+      assert_test("Test 4: User a_tags does not exist", atags_entry4 == NULL);
+    }
+
+    free(user_id4);
+    free_dblist(a_tags4);
+
+    printf("All tests completed.\n");
   }
-
-  free(user_id4);
-  free_dblist(a_tags4);
-
-  printf("All tests completed.\n");
-}
->>>>>>> da2a4e835a17b7f053bf24022025ecfc41aa7da9
 
   return 0;
 }

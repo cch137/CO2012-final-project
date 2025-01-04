@@ -1,23 +1,24 @@
 #include "db/api.h"
+#include "social_network.h"
 
 int main()
 {
   dbapi_start_server();
 
-  // test
+  init_social_network();
 
-  dbapi_flushall();
-  dbapi_set("author", "cch");
-  dbapi_set("author", "cch137");
-  dbapi_set("hw", "3");
-  dbapi_set("foo", "bar");
-  dbapi_del("foo");
-  dbapi_rpush_n("list1", "a", "b", "c", "d", "e", "f", "g", NULL);
-  dbapi_lpush_n("list2", "x", "y", "z", NULL);
-  dbapi_free(dbapi_rpop("list1"));
-  dbapi_free(dbapi_rpop("list1"));
-  dbapi_free(dbapi_lpop("list2"));
-  dbapi_save();
+  // 演算法評估結果 = run_simulations(1000, 100, recommand, ori_design_aggregate);
+  // 演算法評估結果 --> DB
+
+  // 重置 user 的 ptags
+
+  // 演算法評估結果 = run_simulations(1000, 100, recommand, 演算法 二);
+  // 演算法評估結果 --> DB
+
+  // 重置 user 的 ptags
+
+  // 演算法評估結果 = run_simulations(1000, 100, recommand, 演算法 三);
+  // 演算法評估結果 --> DB
 
   dbapi_start_terminal_client();
 

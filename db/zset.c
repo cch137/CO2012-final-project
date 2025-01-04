@@ -279,7 +279,7 @@ DBObj *zinterstore(DBList *zsets, DBList *weights, db_aggregate_t aggregate)
       curr_zset_node = curr_zset_node->next;
     }
     if (has_member)
-      rpush(members, create_dblistnode_with_string(dbutil_strdup(curr_zset_ele->member)));
+      rpush(members, create_dblistnode_with_string(curr_zset_ele->member));
     curr_zset_ele = curr_zset_ele->forward[0];
   }
 

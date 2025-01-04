@@ -13,7 +13,7 @@ DBListNode *create_dblistnode(DBObj *data)
   return node;
 }
 
-DBListNode *create_dblistnode_with_string(char *data)
+DBListNode *create_dblistnode_with_string(const char *data)
 {
   return create_dblistnode(dbobj_create_string(dbutil_strdup(data)));
 }
