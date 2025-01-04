@@ -279,12 +279,6 @@ DBList *get_tag_ids()
 
 char *create_tag(const char *name)
 {
-  // 確保資料庫初始化
-  if (!main_ht)
-    main_ht = ht_create();
-
-  if (!expr_ht)
-    expr_ht = ht_create();
 
   // 生成唯一 OID
   char oid[13];
