@@ -279,6 +279,8 @@ DBList *get_tag_ids()
 
 char *create_tag(const char *name)
 {
+  if (!name || strlen(name) == 0)
+    return NULL; // 標籤名稱為空，返回 NULL
 
   // 生成唯一 OID
   char oid[13];
@@ -288,34 +290,29 @@ char *create_tag(const char *name)
   char *tag_id = (char *)malloc(strlen(TAG_NS_PREFIX) + strlen(oid) + 1);
   if (!tag_id)
     EXIT_ON_MEMORY_ERROR();
+
   sprintf(tag_id, "%s%s", TAG_NS_PREFIX, oid);
 
-  // 儲存標籤名稱
-  if (name && strlen(name) > 0)
-  {
-    char tag_name_key[strlen(tag_id) + strlen(":name") + 1];
-    sprintf(tag_name_key, "%s:name", tag_id);
+  // 組合標籤名稱鍵，例如 "tag:abc123:name"
+  char tag_name_key[strlen(tag_id) + strlen(":name") + 1];
+  sprintf(tag_name_key, "%s:name", tag_id);
 
-    if (!dbapi_set(tag_name_key, name))
-    {
-      free(tag_id); // 清理已分配的記憶體
-      return NULL;  // 若儲存失敗，返回 NULL
-    }
+  // 使用 API 儲存標籤名稱
+  if (!dbapi_set(tag_name_key, name))
+  {
+    free(tag_id); // 清理已分配的記憶體
+    return NULL;  // 若儲存失敗，返回 NULL
   }
 
-  // 初始化與此標籤相關聯的貼文列表
+  // 初始化貼文列表的鍵，例如 "tag:abc123:posts"
   char tag_posts_key[strlen(tag_id) + strlen(":posts") + 1];
   sprintf(tag_posts_key, "%s:posts", tag_id);
 
+  // 如果資料庫不需要顯式初始化列表，可省略此步
   if (!dbapi_lcreate(tag_posts_key))
   {
     // 若初始化失敗，清理標籤名稱
-    if (name && strlen(name) > 0)
-    {
-      char tag_name_key[strlen(tag_id) + strlen(":name") + 1];
-      sprintf(tag_name_key, "%s:name", tag_id);
-      dbapi_del(tag_name_key);
-    }
+    dbapi_del(tag_name_key); // 刪除已儲存的名稱
     free(tag_id);
     return NULL;
   }
