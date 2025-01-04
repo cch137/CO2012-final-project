@@ -406,42 +406,40 @@ DBList *get_user_ptags(const char *user_id)
 
 db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
-  if (!user_id || !tags || !main_ht)
+  // 檢查輸入有效性
+  if (!user_id || strlen(user_id) == 0 || !tags)
+  {
+    fprintf(stderr, "Invalid user_id or tags\n");
     return false;
+  }
 
-  // 從主 Hash Table 獲取使用者數據
-  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
-  if (!entry || !dbobj_is_hash(entry->data))
+  // 生成 p_tags 的鍵，例如 "user:12345:p_tags"
+  char ptags_key[strlen(user_id) + strlen(":p_tags") + 1];
+  sprintf(ptags_key, "%s:p_tags", user_id);
+
+  // 檢查並清空現有的 p_tags 列表
+  if (!dbapi_del(ptags_key))
+  {
+    fprintf(stderr, "Failed to clear existing p_tags for user_id: %s\n", user_id);
     return false;
+  }
 
-  DBHash *user_data = entry->data->value.hash;
-
-  // 創建一個新的標籤列表
-  DBList *tags_copy = create_dblist();
+  // 儲存新的 p_tags 列表
   DBListNode *curr = tags->head;
-
   while (curr)
   {
     if (dbobj_is_string(curr->data))
     {
-      rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      if (!dbapi_lpush(ptags_key, curr->data->value.string))
+      {
+        fprintf(stderr, "Failed to set p_tags for user_id: %s\n", user_id);
+        return false; // 若儲存失敗，返回 false
+      }
     }
     curr = curr->next;
   }
 
-  // 將新標籤列表存入使用者數據
-  DBHashEntry *ptags_entry = hget(user_data, USER_PTAGS_KEY, NULL);
-  if (ptags_entry)
-  {
-    free_dbobj(ptags_entry->data); // 清理舊數據
-    ptags_entry->data = dbobj_create_list(tags_copy);
-  }
-  else
-  {
-    hset(user_data, USER_PTAGS_KEY, dbobj_create_list(tags_copy), NULL);
-  }
-
-  return true;
+  return true; // 成功更新 p_tags，返回 true
 }
 
 // 清空整個資料庫
