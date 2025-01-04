@@ -84,54 +84,50 @@ DBList *get_user_ids()
 
 char *create_user(const char *name, DBList *a_tags)
 {
-  // 確保資料庫初始化
-  if (!main_ht)
-    main_ht = ht_create();
-
-  if (!expr_ht)
-    expr_ht = ht_create();
-
-  // 生成 OID
+  // 初始化必要變數
   char oid[13];
-  generate_oid(oid);
-
-  // 分配 user_id
+  generate_oid(oid); // 生成唯一 OID
   char *user_id = (char *)malloc(strlen(USER_NS_PREFIX) + strlen(oid) + 1);
   if (!user_id)
     EXIT_ON_MEMORY_ERROR();
 
-  snprintf(user_id, strlen(USER_NS_PREFIX) + strlen(oid) + 1, "%s%s", USER_NS_PREFIX, oid);
+  // 組合成完整的 user_id
+  sprintf(user_id, "%s%s", USER_NS_PREFIX, oid);
 
-  // 建立使用者資料
-  DBHash *user_data = ht_create();
-  if (!user_data)
+  // 儲存 user:name
+  if (name && strlen(name) > 0)
   {
-    free(user_id);
-    EXIT_ON_MEMORY_ERROR();
+    char user_name_key[strlen(user_id) + strlen(USER_NAME_KEY) + 2];
+    sprintf(user_name_key, "%s:%s", user_id, USER_NAME_KEY);
+    if (!dbapi_set(user_name_key, name))
+    {
+      free(user_id);
+      return NULL; // 若儲存失敗，回傳 NULL
+    }
   }
 
-  // 處理 name
-  if (name && strlen(name) > 0)
-    hset(user_data, USER_NAME_KEY, dbobj_create_string_with_dup(name), NULL);
-
-  // 處理 a_tags
+  // 儲存 user:a_tags
   if (a_tags && a_tags->length > 0)
   {
-    DBList *tags_copy = create_dblist();
+    char user_atags_key[strlen(user_id) + strlen(USER_ATAGS_KEY) + 2];
+    sprintf(user_atags_key, "%s:%s", user_id, USER_ATAGS_KEY);
+
     DBListNode *curr = a_tags->head;
     while (curr)
     {
       if (dbobj_is_string(curr->data))
-        rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      {
+        if (!dbapi_lpush(user_atags_key, curr->data->value.string))
+        {
+          free(user_id);
+          return NULL; // 若儲存失敗，回傳 NULL
+        }
+      }
       curr = curr->next;
     }
-    hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
-  // 儲存使用者資料到 main_ht
-  hset(main_ht, user_id, dbobj_create_hash(user_data), expr_ht);
-
-  return user_id; // 回傳使用者 ID
+  return user_id; // 回傳成功創建的 user_id
 }
 
 //----------------------------------
@@ -160,47 +156,38 @@ DBList *get_post_ids()
 
 char *create_post(DBList *tags)
 {
-  // 確保主 Hash Table 和過期表已初始化
-  if (!main_ht)
-  {
-    main_ht = ht_create();
-  }
-
-  if (!expr_ht)
-  {
-    expr_ht = ht_create();
-  }
-
-  // 生成貼文 OID
+  // 初始化必要變數
   char oid[13];
-  generate_oid(oid);
+  generate_oid(oid); // 生成唯一 OID
   char *post_id = (char *)malloc(strlen(POST_NS_PREFIX) + strlen(oid) + 1);
   if (!post_id)
     EXIT_ON_MEMORY_ERROR();
+
+  // 組合成完整的 post_id
   sprintf(post_id, "%s%s", POST_NS_PREFIX, oid);
 
-  // 創建貼文數據結構
-  DBHash *post_data = ht_create();
-
-  if (tags)
+  // 儲存 post:tags
+  if (tags && tags->length > 0)
   {
-    DBList *tags_copy = create_dblist();
+    char post_tags_key[strlen(post_id) + strlen(POST_TAGS_KEY) + 2];
+    sprintf(post_tags_key, "%s:%s", post_id, POST_TAGS_KEY);
+
     DBListNode *curr = tags->head;
     while (curr)
     {
       if (dbobj_is_string(curr->data))
       {
-        rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+        if (!dbapi_lpush(post_tags_key, curr->data->value.string))
+        {
+          free(post_id);
+          return NULL; // 若儲存失敗，回傳 NULL
+        }
       }
       curr = curr->next;
     }
-    hset(post_data, POST_TAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
-  // 將貼文儲存到主 Hash Table
-  hset(main_ht, post_id, dbobj_create_hash(post_data), expr_ht);
-
-  return post_id;
+  return post_id; // 回傳成功創建的 post_id
 }
 
 DBList *get_post_tags(const char *post_id)
@@ -355,74 +342,37 @@ char *create_tag(const char *name)
 
 DBList *get_user_atags(const char *user_id)
 {
-  if (!user_id || !main_ht)
+  if (!user_id)
     return NULL;
 
-  // 從主 Hash Table 獲取使用者數據
-  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
-  if (!entry || !dbobj_is_hash(entry->data))
-    return NULL;
+  char user_atags_key[strlen(user_id) + strlen(USER_ATAGS_KEY) + 2];
+  sprintf(user_atags_key, "%s:%s", user_id, USER_ATAGS_KEY);
 
-  DBHash *user_data = entry->data->value.hash;
-
-  // 從使用者數據中獲取興趣標籤列表
-  DBHashEntry *atags_entry = hget(user_data, USER_ATAGS_KEY, NULL);
-  if (!atags_entry || !dbobj_is_list(atags_entry->data))
-    return NULL;
-
-  // 複製興趣標籤列表，確保調用者負責釋放內存
-  DBList *atags_copy = create_dblist();
-  DBListNode *curr = atags_entry->data->value.list->head;
-
-  while (curr)
-  {
-    if (dbobj_is_string(curr->data))
-    {
-      rpush(atags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
-    }
-    curr = curr->next;
-  }
-
-  return atags_copy;
+  return dbapi_lrange(user_atags_key, 0, -1); // 從資料庫中獲取完整的 List
 }
 
 db_bool_t set_user_atags(const char *user_id, DBList *tags)
 {
-  if (!user_id || !main_ht || !tags)
+  if (!user_id || !tags)
     return false;
 
-  // 從主 Hash Table 獲取使用者數據
-  DBHashEntry *entry = hget(main_ht, user_id, expr_ht);
-  if (!entry || !dbobj_is_hash(entry->data))
+  char user_atags_key[strlen(user_id) + strlen(USER_ATAGS_KEY) + 2];
+  sprintf(user_atags_key, "%s:%s", user_id, USER_ATAGS_KEY);
+
+  // 先清空現有的資料
+  if (!dbapi_del(user_atags_key))
     return false;
 
-  DBHash *user_data = entry->data->value.hash;
-
-  // 複製標籤列表，確保內存安全
-  DBList *tags_copy = create_dblist();
+  // 新增新的 tags
   DBListNode *curr = tags->head;
-
   while (curr)
   {
     if (dbobj_is_string(curr->data))
     {
-      rpush(tags_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
+      if (!dbapi_lpush(user_atags_key, curr->data->value.string))
+        return false; // 插入失敗時回傳 false
     }
     curr = curr->next;
-  }
-
-  // 更新使用者數據中的興趣標籤
-  DBHashEntry *atags_entry = hget(user_data, USER_ATAGS_KEY, NULL);
-  if (atags_entry)
-  {
-    // 如果已有標籤，釋放舊的標籤數據
-    free_dblist(atags_entry->data->value.list);
-    atags_entry->data->value.list = tags_copy;
-  }
-  else
-  {
-    // 如果沒有標籤，新增標籤數據
-    hset(user_data, USER_ATAGS_KEY, dbobj_create_list(tags_copy), NULL);
   }
 
   return true;
