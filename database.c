@@ -356,28 +356,51 @@ DBList *get_user_atags(const char *user_id)
 db_bool_t set_user_atags(const char *user_id, DBList *tags)
 {
   if (!user_id || !tags)
+  {
+    fprintf(stderr, "Invalid user_id or tags\n");
     return false;
+  }
 
+  // 生成 atags 的鍵，例如 "user:12345:atags"
   char user_atags_key[strlen(user_id) + strlen(USER_ATAGS_KEY) + 2];
   sprintf(user_atags_key, "%s:%s", user_id, USER_ATAGS_KEY);
 
-  // 先清空現有的資料
-  if (!dbapi_del(user_atags_key))
-    return false;
+  // 使用臨時鍵存儲新的列表，例如 "temp:user:12345:atags"
+  char temp_atags_key[strlen(user_atags_key) + strlen(":temp") + 1];
+  sprintf(temp_atags_key, "temp:%s", user_atags_key);
 
-  // 新增新的 tags
+  // 清空臨時鍵
+  if (!dbapi_del(temp_atags_key))
+  {
+    fprintf(stderr, "Failed to clear temporary atags for user_id: %s\n", user_id);
+    return false;
+  }
+
+  // 儲存新的 tags 到臨時鍵
   DBListNode *curr = tags->head;
   while (curr)
   {
     if (dbobj_is_string(curr->data))
     {
-      if (!dbapi_lpush(user_atags_key, curr->data->value.string))
-        return false; // 插入失敗時回傳 false
+      if (!dbapi_lpush(temp_atags_key, curr->data->value.string))
+      {
+        fprintf(stderr, "Failed to set temporary atags for user_id: %s\n", user_id);
+        dbapi_del(temp_atags_key); // 清理臨時鍵
+        return false;
+      }
     }
     curr = curr->next;
   }
 
-  return true;
+  // 替換舊的 atags 鍵
+  if (!dbapi_rename(temp_atags_key, user_atags_key))
+  {
+    fprintf(stderr, "Failed to rename temporary atags for user_id: %s\n", user_id);
+    dbapi_del(temp_atags_key); // 清理臨時鍵
+    return false;
+  }
+
+  return true; // 成功更新 atags，返回 true
 }
 
 DBList *get_user_ptags(const char *user_id)
@@ -419,7 +442,6 @@ DBList *get_user_ptags(const char *user_id)
 
 db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
-  // 檢查輸入有效性
   if (!user_id || strlen(user_id) == 0 || !tags)
   {
     fprintf(stderr, "Invalid user_id or tags\n");
@@ -430,26 +452,39 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
   char ptags_key[strlen(user_id) + strlen(":p_tags") + 1];
   sprintf(ptags_key, "%s:p_tags", user_id);
 
-  // 檢查並清空現有的 p_tags 列表
-  if (!dbapi_del(ptags_key))
+  // 使用臨時鍵存儲新的列表，例如 "temp:user:12345:p_tags"
+  char temp_ptags_key[strlen(ptags_key) + strlen(":temp") + 1];
+  sprintf(temp_ptags_key, "temp:%s", ptags_key);
+
+  // 清空臨時鍵
+  if (!dbapi_del(temp_ptags_key))
   {
-    fprintf(stderr, "Failed to clear existing p_tags for user_id: %s\n", user_id);
+    fprintf(stderr, "Failed to clear temporary p_tags for user_id: %s\n", user_id);
     return false;
   }
 
-  // 儲存新的 p_tags 列表
+  // 儲存新的 p_tags 列表到臨時鍵
   DBListNode *curr = tags->head;
   while (curr)
   {
     if (dbobj_is_string(curr->data))
     {
-      if (!dbapi_lpush(ptags_key, curr->data->value.string))
+      if (!dbapi_lpush(temp_ptags_key, curr->data->value.string))
       {
-        fprintf(stderr, "Failed to set p_tags for user_id: %s\n", user_id);
-        return false; // 若儲存失敗，返回 false
+        fprintf(stderr, "Failed to set temporary p_tags for user_id: %s\n", user_id);
+        dbapi_del(temp_ptags_key); // 清理臨時鍵
+        return false;
       }
     }
     curr = curr->next;
+  }
+
+  // 替換舊的 p_tags 鍵
+  if (!dbapi_rename(temp_ptags_key, ptags_key))
+  {
+    fprintf(stderr, "Failed to rename temporary p_tags for user_id: %s\n", user_id);
+    dbapi_del(temp_ptags_key); // 清理臨時鍵
+    return false;
   }
 
   return true; // 成功更新 p_tags，返回 true
