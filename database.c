@@ -228,54 +228,29 @@ DBList *get_posts_by_tag(const char *tag_id)
   if (!tag_id || !main_ht)
     return NULL;
 
-  DBList *post_ids = dbapi_keys(); // 獲取所有的鍵值
-  DBList *posts_with_tag = create_dblist();
-  DBListNode *curr = post_ids->head;
+  // 組合標籤對應的鍵，例如 "tag:technology:posts"
+  char tag_posts_key[strlen(tag_id) + strlen(":posts") + 1];
+  sprintf(tag_posts_key, "%s:posts", tag_id);
 
+  // 使用資料庫 API 獲取與標籤相關的所有貼文 ID
+  DBList *post_ids = dbapi_lrange(tag_posts_key, 0, DB_UINT_MAX);
+  if (!post_ids)
+    return NULL;
+
+  // 確保返回的結果為新複製列表
+  DBList *posts_copy = create_dblist();
+  DBListNode *curr = post_ids->head;
   while (curr)
   {
-    if (!dbobj_is_string(curr->data))
+    if (dbobj_is_string(curr->data))
     {
-      curr = curr->next;
-      continue;
+      rpush(posts_copy, create_dblistnode_with_string(dbutil_strdup(curr->data->value.string)));
     }
-
-    const char *post_id = curr->data->value.string;
-    DBHashEntry *entry = hget(main_ht, post_id, expr_ht);
-
-    if (!entry || !dbobj_is_hash(entry->data))
-    {
-      curr = curr->next;
-      continue;
-    }
-
-    DBHash *post_data = entry->data->value.hash;
-    DBHashEntry *tags_entry = hget(post_data, POST_TAGS_KEY, NULL);
-
-    if (!tags_entry || !dbobj_is_list(tags_entry->data))
-    {
-      curr = curr->next;
-      continue;
-    }
-
-    DBList *tags = tags_entry->data->value.list;
-    DBListNode *tag_node = tags->head;
-    while (tag_node)
-    {
-      if (dbobj_is_string(tag_node->data) &&
-          strcmp(tag_node->data->value.string, tag_id) == 0)
-      {
-        rpush(posts_with_tag, create_dblistnode_with_string(dbutil_strdup(post_id)));
-        break;
-      }
-      tag_node = tag_node->next;
-    }
-
     curr = curr->next;
   }
 
-  free_dblist(post_ids);
-  return posts_with_tag;
+  free_dblist(post_ids); // 釋放原始資料庫返回的列表
+  return posts_copy;     // 返回複製的結果列表
 }
 
 //----------------------------------
