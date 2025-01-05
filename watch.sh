@@ -1,5 +1,5 @@
 #!/bin/bash
 
-IGNORE_FILES=("db_test.c")
+IGNORE_FILES=()
 COMPILE_ARGS="-lm"
 source ./scripts/runmon.sh
