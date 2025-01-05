@@ -1,14 +1,18 @@
 #include "database.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include "db/utils.h"
 #include "db/api.h"
 
+#define MAX_SEQUENCE 0xFFFF
 #define USER_NS "user"
 #define POST_NS "post"
 #define TAG_NS "tag"
@@ -52,21 +56,48 @@ static bool is_valid_key(const char *key)
   return true;
 }
 
-// 工具函數：生成唯一 OID
 static char *generate_oid()
 {
-  char *oid = (char *)malloc(13);
-  if (!oid)
-    EXIT_ON_MEMORY_ERROR();
-  const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  int timestamp = (int)time(NULL);
-  sprintf(oid, "%06X", timestamp); // 前 6 位為時間戳
-  for (int i = 0; i < 6; i++)
+  static uint64_t last_timestamp = 0;
+  static uint16_t sequence = 0;
+
+  // Allocate memory to store the generated OID (16 characters + null terminator)
+  char *oid = (char *)malloc(17);
+  if (oid == NULL)
   {
-    oid[6 + i] = charset[rand() % (sizeof(charset) - 1)];
+    perror("Failed to allocate memory for OID");
+    exit(EXIT_FAILURE);
   }
-  oid[12] = '\0';
-  return dbutil_strdup(oid);
+
+  // Get the current timestamp in milliseconds
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  uint64_t current_timestamp = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+
+  // Reset sequence if timestamp changes
+  if (current_timestamp != last_timestamp)
+  {
+    last_timestamp = current_timestamp;
+    sequence = 1;
+  }
+  else
+  {
+    // Increment sequence
+    sequence++;
+
+    // If sequence exceeds max value, sleep for a short time
+    if (sequence > MAX_SEQUENCE)
+    {
+      sequence = 1;
+      usleep(1); // Sleep for 1 microsecond
+      free(oid);
+      return generate_oid();
+    }
+  }
+
+  // Generate the OID
+  snprintf(oid, 17, "%012llx%04x", (unsigned long long)last_timestamp, sequence);
+  return oid;
 }
 
 char *parse_oid(const char *query_key)
