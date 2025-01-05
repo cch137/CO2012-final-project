@@ -89,7 +89,16 @@ function detect_entry_points {
 
     echo "Detected files with main function: ${prioritized_files[*]}"
     echo ""
-    options=(${prioritized_files[@]})
+    entry_point_options=(${prioritized_files[@]})
+}
+
+function clear_and_echo_banner {
+    echo -e "\e[0m\e[1;31m"
+    clear
+    echo -e " _ _ _  _ _ _  _ __  ___ _ _   "
+    echo -e "| '_| || | ' \| '  \/ _ \ ' \  "
+    echo -e "|_|  \_,_|_||_|_|_|_\___/_||_| "
+    echo -e "\e[0m"
 }
 
 # Function to display the selection menu with arrow keys
@@ -98,14 +107,14 @@ function select_entry_point {
     local selected=0
 
     while true; do
-        clear
-        echo "Select the entry point for the program:"
+        clear_and_echo_banner
+        echo "Select an entry point:"
 
-        for i in "${!options[@]}"; do
+        for i in "${!entry_point_options[@]}"; do
             if [ "$i" -eq "$selected" ]; then
-                echo -e "\e[1;32m> ${options[$i]}\e[0m"  # Highlight selected option
+                echo -e "\e[1;32m> ${entry_point_options[$i]}\e[0m"  # Highlight selected option
             else
-                echo "  ${options[$i]}"
+                echo "  ${entry_point_options[$i]}"
             fi
         done
 
@@ -117,10 +126,10 @@ function select_entry_point {
                 read -rsn2 key  # Read additional characters for arrow keys
                 case "$key" in
                     "[A") # Up arrow
-                        selected=$(( (selected - 1 + ${#options[@]}) % ${#options[@]} ))
+                        selected=$(( (selected - 1 + ${#entry_point_options[@]}) % ${#entry_point_options[@]} ))
                         ;;
                     "[B") # Down arrow
-                        selected=$(( (selected + 1) % ${#options[@]} ))
+                        selected=$(( (selected + 1) % ${#entry_point_options[@]} ))
                         ;;
                 esac
                 ;;
@@ -133,14 +142,14 @@ function select_entry_point {
         esac
     done
 
-    ENTRY_POINT="${options[$selected]}"
+    ENTRY_POINT="${entry_point_options[$selected]}"
     OUTPUT_EXECUTABLE="${ENTRY_POINT%%.*}"
 
+    clear
     echo -e "\n\e[44;37mEntry point selected: $ENTRY_POINT\e[0m"
-    echo -e "\b\e[44;37mPreparing to compile and run the program...\e[0m\n"
 }
 
-function compile_and_run {
+function update_compile_command {
     # Find .c files while excluding ignored files and files with other entry points
     c_files=$(find . -type f -name "*.c" ! -path "*/\.*/*" ! -name ".*" ! -name "$ENTRY_POINT")
 
@@ -150,13 +159,17 @@ function compile_and_run {
     done
 
     # Exclude other entry point files
-    for entry in "${options[@]}"; do
+    for entry in "${entry_point_options[@]}"; do
         if [ "$entry" != "$ENTRY_POINT" ]; then
             c_files=$(echo "$c_files" | grep -v "$entry")
         fi
     done
 
     compile_command="gcc -o $OUTPUT_EXECUTABLE $ENTRY_POINT $c_files $COMPILE_ARGS"  # Build command
+}
+
+function compile_and_run {
+    update_compile_command
 
     # Terminate the previous process if it's still running
     if [ $current_pid -ne 0 ] && kill -0 $current_pid 2>/dev/null; then
@@ -213,6 +226,68 @@ function monitor_files {
     done
 }
 
+function build_only {
+    update_compile_command
+    eval $compile_command
+    if [ $? -eq 0 ]; then
+        echo -e "\e[1;32mCompilation successful.\e[0m"
+    else
+        echo -e "\e[41;37mCompilation failed.\e[0m"
+    fi
+}
+
+function main_menu {
+    local main_menu_options=("watch" "build")
+    local selected=0
+
+    while true; do
+        clear_and_echo_banner
+        echo -e "Please select an option:"
+
+        for i in "${!main_menu_options[@]}"; do
+            if [ "$i" -eq "$selected" ]; then
+                echo -e "\e[1;32m> ${main_menu_options[$i]}\e[0m"  # Highlight selected option
+            else
+                echo "  ${main_menu_options[$i]}"
+            fi
+        done
+
+        read -rsn1 key
+        case "$key" in
+            $'\x1b')
+                read -rsn2 key
+                case "$key" in
+                    "[A")
+                        selected=$(( (selected - 1 + ${#main_menu_options[@]}) % ${#main_menu_options[@]} ))
+                        ;;
+                    "[B")
+                        selected=$(( (selected + 1) % ${#main_menu_options[@]} ))
+                        ;;
+                esac
+                ;;
+            "")
+                break
+                ;;
+            *)
+                continue
+                ;;
+        esac
+    done
+
+    local selected_option="${main_menu_options[$selected]}"
+    echo -e "\n\e[44;37mSelected option: $selected_option\e[0m"
+    select_entry_point
+    case "$selected" in
+        0)
+            echo -e "\b\e[44;37mPreparing to compile and run the program...\e[0m\n"
+            monitor_files
+            ;;
+        1)
+            build_only
+            ;;
+    esac
+}
+
 # Check if inotify-tools is installed
 check_inotify
 
@@ -222,6 +297,5 @@ trap "kill $current_pid 2>/dev/null; pkill -P $$" EXIT
 # Start monitoring the script in the background
 monitor_script &
 
-# Select the entry point before monitoring files
-select_entry_point
-monitor_files
+# Display the main menu
+main_menu
