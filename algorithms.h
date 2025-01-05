@@ -19,14 +19,19 @@ typedef enum type_of_algorithm
 } type_of_algorithm;
 
 /*提供給main處理AggregatePTagsFunc */
-void *SIGMOID(DBList *old_p_tags, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n);
-void *SELU(DBList *old_p_tags, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n);
-void *D_SIGMOID(DBList *old_p_tags, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n);
-void *SQUARE(DBList *old_p_tags, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n);
-void *DIRECT(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n);
+void SIGMOID(DBList *old_p_tags, DBHash *likes_dict, size_t iteration_i, size_t iteration_n);
+void SELU(DBList *old_p_tags, DBHash *likes_dict, size_t iteration_i, size_t iteration_n);
+void D_SIGMOID(DBList *old_p_tags, DBHash *likes_dict, size_t iteration_i, size_t iteration_n);
+void SQUARE(DBList *old_p_tags, DBHash *likes_dict, size_t iteration_i, size_t iteration_n);
+void DIRECT(DBList *old_p_tag, DBHash *likes_dict, size_t iteration_i, size_t iteration_n);
 
 // 根據likes_dict產生p_tag
 DBList *generate_personality(DBHash *likes_dict);
+
+// (原本的p_tag,大眾喜好的p_tag)會回傳一個新的p_tag，直接根據此p_tag推薦post，propotion的比例是小數
+// 若是不使用popular_p_tag放入NULL，不使用propotion參數放入-1，自動使用0.2
+// 使用後須釋放記憶體
+DBList *add_random_to_tag(DBList *personal_p_tag, DBList *public_p_tag, double propotion);
 
 // 進行aggreate、cut、repair
 void s_aggregate_cut_repair(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm s_type);
@@ -44,6 +49,7 @@ double s_selu(double input);
 double s_sigmoid(double input);
 
 // 回傳將input乘上在該點的斜率
+// 將原本的d_digmoid輸出平方歸一化，讓最大值為1並且最小值接近0
 double s_d_sigmoid(double input);
 
 // 回傳input平方，希望讓大的放大，小的縮小

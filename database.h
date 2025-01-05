@@ -19,10 +19,12 @@ char *parse_oid(const char *query_key);
 DBList *get_user_ids();
 
 // 建立新使用者 (name 為可選)，回傳該使用者的 OID (需自行釋放)
-// a_tags 是一個由 string 組成的 List
-// p_tags 先不設
+// atags 是一個由 string 組成的 List
+// s 先不設
 // 若無需 name，可在呼叫時傳入 NULL 或空字串。
-void create_user(const char *name, DBList *a_tags);
+char *create_user_with_id_returned(const char *name, DBList *atags);
+
+void create_user(const char *name, DBList *atags);
 
 // 取得所有貼文的 OID。呼叫者需釋放回傳的陣列。
 // 呼叫者負責釋放傳回的字串陣列。
@@ -31,7 +33,11 @@ DBList *get_post_ids();
 // 建立新貼文，必須指定作者 OID 與標籤(含權重)列表
 // tags 是一個由 string 組成的 List
 // 回傳貼文 OID (需自行釋放)
+char *create_post_with_id_returned(DBList *tags);
+
 void create_post(DBList *tags);
+
+void clear_posts();
 
 // 取得 post 的 tags
 // 呼叫者負責釋放傳回的字串陣列。
@@ -39,13 +45,15 @@ DBList *get_post_tags(const char *tag_id);
 
 // 根據某個標籤取得貼文清單
 // 呼叫者需釋放傳回的陣列
-DBList *get_posts_by_tag(const char *tag_id);
+DBList *get_posts_by_tag(const char *tag_id, size_t limit);
 
 // 取得所有標籤的 OID。呼叫者需釋放回傳的陣列。
 // 呼叫者負責釋放傳回的字串陣列。
 DBList *get_tag_ids();
 
 // 建立新標籤，回傳該標籤的 OID (需自行釋放)
+char *create_tag_with_id_returned(const char *name);
+
 void create_tag(const char *name);
 
 DBList *get_user_atags(const char *user_id);

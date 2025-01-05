@@ -183,7 +183,7 @@ static void _ht_clear(DBHash *ht)
     ht->buckets0 = NULL;
   }
 
-  if (ht->buckets1)
+  if (ht_is_rehashing(ht) && ht->buckets1)
   {
     for (i = 0; i < ht->size1; ++i)
     {

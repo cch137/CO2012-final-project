@@ -177,7 +177,7 @@ DBList *get_user_ids()
   return get_namespace_ids(USER_NS_PREFIX, NAME_FIELD_SUFFIX);
 };
 
-void create_user(const char *name, DBList *a_tags)
+char *create_user_with_id_returned(const char *name, DBList *atags)
 {
   char *oid = generate_oid(oid);
 
@@ -186,10 +186,15 @@ void create_user(const char *name, DBList *a_tags)
   free(query_key);
 
   query_key = create_query_key(USER_NS, oid, ATAGS_FIELD_NAME);
-  util_dbapi_set_list(query_key, a_tags);
+  util_dbapi_set_list(query_key, atags);
   free(query_key);
 
-  free(oid);
+  return oid;
+}
+
+void create_user(const char *name, DBList *atags)
+{
+  free(create_user_with_id_returned(name, atags));
 }
 
 DBList *get_post_ids()
@@ -197,7 +202,7 @@ DBList *get_post_ids()
   return get_namespace_ids(POST_NS_PREFIX, TAGS_FIELD_SUFFIX);
 }
 
-void create_post(DBList *tags)
+char *create_post_with_id_returned(DBList *tags)
 {
   char *oid = generate_oid(oid);
 
@@ -205,7 +210,28 @@ void create_post(DBList *tags)
   util_dbapi_set_list(query_key, tags);
   free(query_key);
 
-  free(oid);
+  return oid;
+}
+
+void create_post(DBList *tags)
+{
+  free(create_post_with_id_returned(tags));
+}
+
+void clear_posts()
+{
+  DBList *list = dbapi_keys();
+  DBListNode *curr = list->head;
+
+  while (curr)
+  {
+    const char *key = curr->data->value.string;
+    if (starts_with(key, POST_NS_PREFIX))
+      dbapi_del(key);
+    curr = curr->next;
+  }
+
+  free_dblist(list);
 }
 
 DBList *get_post_tags(const char *post_id)
@@ -217,15 +243,15 @@ DBList *get_post_tags(const char *post_id)
   return post_tags;
 }
 
-DBList *get_posts_by_tag(const char *tag_id)
+DBList *get_posts_by_tag(const char *tag_id, size_t limit)
 {
   DBList *filtered_post_ids = create_dblist();
   DBList *post_ids = get_post_ids();
   DBListNode *post_id_node = post_ids->head;
 
-  while (post_id_node)
+  while (post_id_node && filtered_post_ids->length < limit)
   {
-    const char *post_id = post_ids->head->data->value.string;
+    const char *post_id = post_id_node->data->value.string;
     DBList *post_tags = get_post_tags(post_id);
     DBListNode *post_tag_node = post_tags->head;
     while (post_tag_node)
@@ -245,12 +271,13 @@ DBList *get_posts_by_tag(const char *tag_id)
   free_dblist(post_ids);
   return filtered_post_ids;
 }
+
 DBList *get_tag_ids()
 {
   return get_namespace_ids(TAG_NS_PREFIX, NAME_FIELD_SUFFIX);
 }
 
-void create_tag(const char *name)
+char *create_tag_with_id_returned(const char *name)
 {
   char *oid = generate_oid();
 
@@ -258,7 +285,12 @@ void create_tag(const char *name)
   dbapi_set(query_key, name);
   free(query_key);
 
-  free(oid);
+  return oid;
+}
+
+void create_tag(const char *name)
+{
+  free(create_tag_with_id_returned(name));
 }
 
 DBList *get_user_atags(const char *user_id)
@@ -294,7 +326,7 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
   util_dbapi_set_list(query_key, tags);
   free(query_key);
 
-  return true; // 成功更新 p_tags，返回 true
+  return true; // 成功更新 s，返回 true
 }
 
 void flush_all(void)

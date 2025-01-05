@@ -1,26 +1,36 @@
+#include <stdio.h>
+
 #include "db/api.h"
+#include "db/interaction.h"
+#include "algorithms.h"
 #include "social_network.h"
+#include "database.h"
 
 int main()
 {
+  printf("program start\n");
   dbapi_start_server();
 
   init_social_network();
+  printf("social network inited\n");
 
-  // 演算法評估結果 = run_simulations(1000, 100, recommand, ori_design_aggregate);
-  // 演算法評估結果 --> DB
+  DBList *popular_tags = get_popular_tags();
+  printf("calculated popular tags\n");
 
-  // 重置 user 的 ptags
+  dbapi_save();
+  printf("database saved to JSON file\n");
 
-  // 演算法評估結果 = run_simulations(1000, 100, recommand, 演算法 二);
-  // 演算法評估結果 --> DB
+  run_simulations(1000, 100, basic_recommand_posts, basic_aggregate_func, popular_tags);
+  free_dblist(popular_tags);
+  printf("simulations done\n");
 
-  // 重置 user 的 ptags
+  clear_posts();
+  printf("posts cleared\n");
 
-  // 演算法評估結果 = run_simulations(1000, 100, recommand, 演算法 三);
-  // 演算法評估結果 --> DB
+  dbapi_save();
+  printf("database saved to JSON file\n");
 
-  dbapi_start_terminal_client();
+  printf("program end\n");
 
   return 0;
 }

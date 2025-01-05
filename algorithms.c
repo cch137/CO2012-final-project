@@ -9,18 +9,21 @@
 #include "social_network.h"
 #include "algorithms.h"
 
+#define initial_prpoption 0.2
+
 #define selu_to_zero 0.01
 #define selu_to_less 0.1
 
+// 因為希望輸出的最大值接近1最小值接近0，所以調整k，原本應該是1
 #define sigmoid_l 1
-#define sigmoid_k 1
+#define sigmoid_k 8
 #define sigmoid_mid 0.5
 
 // 小於relu_cut的權重直接變0
 #define relu_cut 0.01
 
 // 1.33/1 = 0.25
-#define curve_begin 0.25
+#define curve_begin 0.5
 
 DBList *generate_personality(DBHash *likes_dict)
 {
@@ -46,16 +49,75 @@ DBList *generate_personality(DBHash *likes_dict)
         liked_count += (strcmp(post_node->data->value.string, "1") == 0) ? 1 : 0;
       }
       post_node = post_node->next;
-      free(a);
+      if (a)
+        free(a);
     }
+    post_node = all_posts->head;
     string->weight = (double)liked_count / post_count;
-    lpush(new_p_tag, create_dblistnode_with_string(serialize_tag_with_weight(string)));
+    rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_with_weight(string)));
     id_node = id_node->next;
   }
 
   free_tag_with_weight(string);
   free_dblist(all_posts);
   free_dblist(all_id);
+  return new_p_tag;
+}
+
+DBList *add_random_to_tag(DBList *personal_p_tag, DBList *public_p_tag, double propotion)
+{
+  DBList *new_p_tag = create_dblist();
+  TagWithWeight *new_string = create_tag_with_weight("1", 1);
+
+  if (propotion == -1)
+  {
+    propotion = initial_prpoption;
+  }
+  if (public_p_tag)
+  {
+    DBListNode *personal_node = personal_p_tag->head;
+    DBListNode *public_node = public_p_tag->head;
+
+    TagWithWeight *personal_string = create_tag_with_weight("1", 1);
+    TagWithWeight *public_string = create_tag_with_weight("1", 1);
+    while (public_node)
+    {
+      public_string = parse_tag_with_weight(public_node->data->value.string);
+      while (personal_node)
+      {
+        personal_string = parse_tag_with_weight(personal_node->data->value.string);
+        if (strcmp(public_string->id, personal_string->id) == 0)
+        {
+          new_string->weight = (1 - propotion) * personal_string->weight;
+          new_string->weight += public_string->weight * propotion;
+
+          rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_with_weight(new_string)));
+          break;
+        }
+        personal_node = personal_node->next;
+      }
+      personal_node = personal_p_tag->head;
+      public_node = public_node->next;
+    }
+    free_tag_with_weight(personal_string);
+    free_tag_with_weight(public_string);
+  }
+  else
+  {
+    DBListNode *personal_node = personal_p_tag->head;
+    TagWithWeight *personal_string = create_tag_with_weight("1", 1);
+    while (personal_node)
+    {
+      personal_string = parse_tag_with_weight(personal_node->data->value.string);
+
+      personal_string->weight = (1 - propotion) * personal_string->weight;
+      personal_string->weight += propotion * ((double)rand() / (RAND_MAX + 1.0));
+
+      personal_node = personal_node->next;
+    }
+    free_tag_with_weight(personal_string);
+  }
+  free_tag_with_weight(new_string);
   return new_p_tag;
 }
 
@@ -68,27 +130,29 @@ algorithm_exe algorithm[algorithm_count] = {
     s_square,
     s_direct};
 
-void *SIGMOID(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
+void SIGMOID(DBList *old_p_tag, DBHash *likes_dict, size_t iteration_i, size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
   s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, sigmoid);
 }
-void *SELU(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
+
+void SELU(DBList *old_p_tag, DBHash *likes_dict, size_t iteration_i, size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
   s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, selu);
 }
-void *D_SIGMOID(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
+
+void D_SIGMOID(DBList *old_p_tag, DBHash *likes_dict, size_t iteration_i, size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
   s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, d_sigmoid);
 }
-void *SQUARE(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
+void SQUARE(DBList *old_p_tag, DBHash *likes_dict, size_t iteration_i, size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
   s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, square);
 }
-void *DIRECT(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
+void DIRECT(DBList *old_p_tag, DBHash *likes_dict, size_t iteration_i, size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
   s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, direct);
@@ -103,25 +167,24 @@ void s_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit
   TagWithWeight *new_string = create_tag_with_weight("1", 1);
   while (new_node)
   {
+    new_string = parse_tag_with_weight(new_node->data->value.string);
     while (old_node)
     {
       old_string = parse_tag_with_weight(old_node->data->value.string);
-      new_string = parse_tag_with_weight(new_node->data->value.string);
-      if (strcmp(old_string->id, new_string->id) != 0)
+      if (strcmp(old_string->id, new_string->id) == 0)
       {
-        continue;
+        old_string->weight = (1 - s_curve(time / limit)) * old_string->weight;
+        old_string->weight += s_curve(time / limit) * algorithm[algo_type](new_string->weight);
+
+        old_node->data->value.string = serialize_tag_with_weight(old_string);
+
+        break;
       }
-      old_string->weight = (1 - s_curve(time / limit)) * old_string->weight;
-      old_string->weight += s_curve(time / limit) * algorithm[algo_type](new_string->weight);
-
-      old_node->data->value.string = serialize_tag_with_weight(old_string);
-
-      break;
+      old_node = old_node->next;
     }
     old_node = old_p_tag->head;
     new_node = new_node->next;
   }
-
   free_tag_with_weight(old_string);
   free_tag_with_weight(new_string);
 }
@@ -192,7 +255,7 @@ double s_selu(double input)
 {
   // 常數定義
   const double alpha = 1.67326324235;
-  const double lambda = 1.05070098736;
+  const double lambda = 0.957; // 原本應該要是1.05多的但我們希望他最大輸出值是1所以更改
 
   if (input < selu_to_zero)
   {
@@ -221,7 +284,11 @@ double s_sigmoid(double input)
 double s_d_sigmoid(double input)
 {
   double f = s_sigmoid(input);
-  return input * sigmoid_k * f * (1 - f / sigmoid_l);
+  double derivative = sigmoid_k * sigmoid_l * f * (1 - f / sigmoid_l);
+  // 平方歸一化，讓最大值為1並且最小值接近0
+  double max_derivative = sigmoid_k * sigmoid_l / 4;
+  double normalized = derivative / max_derivative;
+  return normalized * normalized;
 }
 
 // 小於relu_cut的就為0
