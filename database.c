@@ -56,7 +56,7 @@ static bool is_valid_key(const char *key)
   return true;
 }
 
-static char *generate_oid()
+char *generate_oid()
 {
   static uint64_t last_timestamp = 0;
   static uint16_t sequence = 0;
@@ -167,7 +167,7 @@ static void util_dbapi_set_list(const char *key, DBList *list)
   DBListNode *node = list->head;
   while (node)
   {
-    dbapi_rpush(ATAGS_FIELD_NAME, node->data->value.string);
+    dbapi_rpush(key, node->data->value.string);
     node = node->next;
   }
 }
@@ -177,7 +177,7 @@ DBList *get_user_ids()
   return get_namespace_ids(USER_NS_PREFIX, NAME_FIELD_SUFFIX);
 };
 
-char *create_user(const char *name, DBList *a_tags)
+void create_user(const char *name, DBList *a_tags)
 {
   char *oid = generate_oid(oid);
 
@@ -189,7 +189,7 @@ char *create_user(const char *name, DBList *a_tags)
   util_dbapi_set_list(query_key, a_tags);
   free(query_key);
 
-  return oid;
+  free(oid);
 }
 
 DBList *get_post_ids()
@@ -197,7 +197,7 @@ DBList *get_post_ids()
   return get_namespace_ids(POST_NS_PREFIX, TAGS_FIELD_SUFFIX);
 }
 
-char *create_post(DBList *tags)
+void create_post(DBList *tags)
 {
   char *oid = generate_oid(oid);
 
@@ -205,7 +205,7 @@ char *create_post(DBList *tags)
   util_dbapi_set_list(query_key, tags);
   free(query_key);
 
-  return oid;
+  free(oid);
 }
 
 DBList *get_post_tags(const char *post_id)
@@ -250,7 +250,7 @@ DBList *get_tag_ids()
   return get_namespace_ids(TAG_NS_PREFIX, NAME_FIELD_SUFFIX);
 }
 
-char *create_tag(const char *name)
+void create_tag(const char *name)
 {
   char *oid = generate_oid();
 
@@ -258,7 +258,7 @@ char *create_tag(const char *name)
   dbapi_set(query_key, name);
   free(query_key);
 
-  return oid;
+  free(oid);
 }
 
 DBList *get_user_atags(const char *user_id)

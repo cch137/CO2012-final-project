@@ -7,6 +7,8 @@
 
 #include "db/list.h"
 
+char *generate_oid();
+
 // 提取 key 的 OID，回傳一個新的 char * 用完要記得 free
 // 若找無，回傳 NULL。
 char *parse_oid(const char *query_key);
@@ -20,7 +22,7 @@ DBList *get_user_ids();
 // a_tags 是一個由 string 組成的 List
 // p_tags 先不設
 // 若無需 name，可在呼叫時傳入 NULL 或空字串。
-char *create_user(const char *name, DBList *a_tags);
+void create_user(const char *name, DBList *a_tags);
 
 // 取得所有貼文的 OID。呼叫者需釋放回傳的陣列。
 // 呼叫者負責釋放傳回的字串陣列。
@@ -29,7 +31,7 @@ DBList *get_post_ids();
 // 建立新貼文，必須指定作者 OID 與標籤(含權重)列表
 // tags 是一個由 string 組成的 List
 // 回傳貼文 OID (需自行釋放)
-char *create_post(DBList *tags);
+void create_post(DBList *tags);
 
 // 取得 post 的 tags
 // 呼叫者負責釋放傳回的字串陣列。
@@ -44,7 +46,7 @@ DBList *get_posts_by_tag(const char *tag_id);
 DBList *get_tag_ids();
 
 // 建立新標籤，回傳該標籤的 OID (需自行釋放)
-char *create_tag(const char *name);
+void create_tag(const char *name);
 
 DBList *get_user_atags(const char *user_id);
 
