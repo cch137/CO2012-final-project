@@ -146,7 +146,7 @@ function select_entry_point {
     OUTPUT_EXECUTABLE="${ENTRY_POINT%%.*}"
 
     clear
-    echo -e "\n\e[44;37mEntry point selected: $ENTRY_POINT\e[0m"
+    echo -e "\e[44;37mEntry point selected: $ENTRY_POINT\e[0m"
 }
 
 function update_compile_command {
