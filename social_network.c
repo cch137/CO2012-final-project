@@ -185,7 +185,7 @@ void init_social_network(void)
     db_int_t selected_tag_index = (db_int_t)rand() % (db_int_t)post_tags->length;
     DBListNode *tag_id_node = tag_list->head;
 
-    while (selected_tag_index && tag_id_node)
+    while (selected_tag_index && !tag_id_node)
     {
       tag_id_node = tag_id_node->next;
       --selected_tag_index;

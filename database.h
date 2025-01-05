@@ -7,6 +7,10 @@
 
 #include "db/list.h"
 
+// 提取 key 的 OID，回傳一個新的 char * 用完要記得 free
+// 若找無，回傳 NULL。
+char *parse_oid(const char *query_key);
+
 // 取得所有使用者的 id。
 // 呼叫者負責釋放傳回的字串陣列。
 // 回傳值：包含所有使用者 OID 的字串陣列 (char**)

@@ -1,11 +1,9 @@
-// database.c
 #include "database.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
-#include <hiredis/hiredis.h>
 #include <ctype.h>
 
 #include "db/utils.h"
@@ -71,7 +69,7 @@ static char *generate_oid()
   return dbutil_strdup(oid);
 }
 
-static char *parse_oid(const char *query_key)
+char *parse_oid(const char *query_key)
 {
   if (!query_key)
     return NULL;
