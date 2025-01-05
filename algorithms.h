@@ -29,36 +29,36 @@ void *DIRECT(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, co
 DBList *generate_personality(DBHash *likes_dict);
 
 // 進行aggreate、cut、repair
-void algo_aggregate_cut_repair(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm algo_type);
+void s_aggregate_cut_repair(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm s_type);
 
 /*前處理，將新舊p_tag混和*/
-void algo_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm algo_type);
+void s_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm s_type);
 
 /*後處理，在新舊p_tag混和之後使用*/
 typedef double alorithm_function(size_t input);
 
 // selu與relu的混和，分段，將大的線性變大，小的指數變小
-double algo_selu(double input);
+double s_selu(double input);
 
 // 標準羅吉斯回歸函數，把x0變化
-double algo_sigmoid(double input);
+double s_sigmoid(double input);
 
 // 回傳將input乘上在該點的斜率
-double algo_d_sigmoid(double input);
+double s_d_sigmoid(double input);
 
 // 回傳input平方，希望讓大的放大，小的縮小
-double algo_square(double input);
+double s_square(double input);
 
 // 通過二次函數讓更改的比例逐漸下降，y=0.25(x-1)^2
-double algo_curve(double input);
+double s_curve(double input);
 
 // 小於relu_cut的就為0
-double algo_relu(double input);
+double s_relu(double input);
 
 // 不做任何權重
-double algo_direct(double input);
+double s_direct(double input);
 
 // 讓p_tag總和變為1
-void algo_repair(DBList *old_p_tag);
+void s_repair(DBList *old_p_tag);
 
 #endif

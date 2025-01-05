@@ -62,39 +62,39 @@ DBList *generate_personality(DBHash *likes_dict)
 typedef double (*algorithm_exe)(double);
 
 algorithm_exe algorithm[algorithm_count] = {
-    algo_selu,
-    algo_sigmoid,
-    algo_d_sigmoid,
-    algo_square,
-    algo_direct};
+    s_selu,
+    s_sigmoid,
+    s_d_sigmoid,
+    s_square,
+    s_direct};
 
 void *SIGMOID(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
-  algo_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, sigmoid);
+  s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, sigmoid);
 }
 void *SELU(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
-  algo_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, selu);
+  s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, selu);
 }
 void *D_SIGMOID(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
-  algo_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, d_sigmoid);
+  s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, d_sigmoid);
 }
 void *SQUARE(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
-  algo_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, square);
+  s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, square);
 }
 void *DIRECT(DBList *old_p_tag, DBHash *likes_dict, const size_t iteration_i, const size_t iteration_n)
 {
   DBList *new_p_tag = generate_personality(likes_dict);
-  algo_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, direct);
+  s_aggregate_cut_repair(old_p_tag, new_p_tag, iteration_i, iteration_n, direct);
 }
 
-void algo_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm algo_type)
+void s_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm algo_type)
 {
   DBListNode *old_node = old_p_tag->head;
   DBListNode *new_node = new_p_tag->head;
@@ -111,8 +111,8 @@ void algo_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t li
       {
         continue;
       }
-      old_string->weight = (1 - algo_curve(time / limit)) * old_string->weight;
-      old_string->weight += algo_curve(time / limit) * algorithm[algo_type](new_string->weight);
+      old_string->weight = (1 - s_curve(time / limit)) * old_string->weight;
+      old_string->weight += s_curve(time / limit) * algorithm[algo_type](new_string->weight);
 
       old_node->data->value.string = serialize_tag_with_weight(old_string);
 
@@ -126,7 +126,7 @@ void algo_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t li
   free_tag_with_weight(new_string);
 }
 
-void algo_cut(DBList *old_p_tag)
+void s_cut(DBList *old_p_tag)
 {
   DBListNode *node = old_p_tag->head;
 
@@ -135,7 +135,7 @@ void algo_cut(DBList *old_p_tag)
   while (node)
   {
     string = parse_tag_with_weight(node->data->value.string);
-    string->weight = algo_relu(string->weight);
+    string->weight = s_relu(string->weight);
     node->data->value.string = serialize_tag_with_weight(string);
     node = node->next;
   }
@@ -143,7 +143,7 @@ void algo_cut(DBList *old_p_tag)
   free_tag_with_weight(string);
 }
 
-void algo_repair(DBList *old_p_tag)
+void s_repair(DBList *old_p_tag)
 {
   DBListNode *node = old_p_tag->head;
 
@@ -176,19 +176,19 @@ void algo_repair(DBList *old_p_tag)
   free_tag_with_weight(string);
 }
 
-void algo_aggregate_cut_repair(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm algo_type)
+void s_aggregate_cut_repair(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm s_type)
 {
-  algo_aggregate(old_p_tag, new_p_tag, time, limit, algo_type);
-  algo_cut(old_p_tag);
+  s_aggregate(old_p_tag, new_p_tag, time, limit, s_type);
+  s_cut(old_p_tag);
   // p_tag總和變1，不需要了
-  // algo_repair(old_p_tag);
+  // s_repair(old_p_tag);
   free_dblist(new_p_tag);
 }
 
 // 將大於selu_to_less的值放大alpha倍
 // 小於selu_to_less的值呈指數下降
 // 將小於selu_to_zero的值變為0
-double algo_selu(double input)
+double s_selu(double input)
 {
   // 常數定義
   const double alpha = 1.67326324235;
@@ -212,36 +212,36 @@ double algo_selu(double input)
 }
 
 // 標準羅吉斯回歸函數，把x0變化
-double algo_sigmoid(double input)
+double s_sigmoid(double input)
 {
   return sigmoid_l / (1 + exp((-1) * sigmoid_k * (input - sigmoid_mid)));
 }
 
 // 回傳將input乘上在該點的斜率
-double algo_d_sigmoid(double input)
+double s_d_sigmoid(double input)
 {
-  double f = algo_sigmoid(input);
+  double f = s_sigmoid(input);
   return input * sigmoid_k * f * (1 - f / sigmoid_l);
 }
 
 // 小於relu_cut的就為0
-double algo_relu(double input)
+double s_relu(double input)
 {
   return input > relu_cut ? input : 0;
 }
 
 // 回傳input平方，希望讓大的放大，小的縮小
-double algo_square(double input)
+double s_square(double input)
 {
   return input * input;
 }
 
-double algo_direct(double input)
+double s_direct(double input)
 {
   return input;
 }
 
-double algo_curve(double input)
+double s_curve(double input)
 {
   return curve_begin * (input - 1) * (input - 1);
 }
