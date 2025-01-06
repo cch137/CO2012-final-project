@@ -20,9 +20,17 @@ int main()
   dbapi_save();
   printf("database saved to JSON file\n");
 
-  run_simulations(1000, 100, basic_recommand_posts, basic_aggregate_func, popular_tags);
-  free_dblist(popular_tags);
+  run_simulations(1000, 100, basic_recommand_posts, SQUARE, popular_tags);
   printf("simulations done\n");
+
+  DBListNode *popular_tags_node = popular_tags->head;
+  dbapi_set("user:popular:name", "popular");
+  while (popular_tags_node)
+  {
+    dbapi_rpush("user:popular:atags", popular_tags_node->data->value.string);
+    popular_tags_node = popular_tags_node->next;
+  }
+  free_dblist(popular_tags);
 
   clear_posts();
   printf("posts cleared\n");

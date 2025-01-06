@@ -96,7 +96,6 @@ TagWithWeight *parse_tag_with_weight(const char *tag_with_weight)
 
 void trim_ptags(DBList *ptags)
 {
-  return;
   double total_weight = 0;
   DBListNode *node = ptags->head;
   while (node)
@@ -279,7 +278,6 @@ static DBList *likes_dict_to_ptags(DBHash *likes_dict)
     free_dblist(post_tags);
     post_id_node = post_id_node->next;
   }
-  free_dblist(post_ids);
 
   // 把 ptag_dict 轉換成 result_ptags
   DBList *result_ptags = create_dblist();
@@ -290,7 +288,7 @@ static DBList *likes_dict_to_ptags(DBHash *likes_dict)
     const char *ptag_id = ptag_id_node->data->value.string;
     const DBHashEntry *ptag_entry = hget(ptag_dict, ptag_id, NULL);
     dbobj_string_to_int(ptag_entry->data);
-    const int ptag_w = ptag_entry->data->value.int_value;
+    const double ptag_w = (double)ptag_entry->data->value.int_value / (double)post_ids->length;
     TagWithWeight *tag_with_w = create_tag_with_weight(ptag_id, ptag_w);
     char *serialized_ptags = serialize_tag_with_weight(tag_with_w);
     rpush(result_ptags, create_dblistnode_with_string(serialized_ptags));
@@ -300,9 +298,8 @@ static DBList *likes_dict_to_ptags(DBHash *likes_dict)
   }
 
   ht_free(ptag_dict);
+  free_dblist(post_ids);
   free_dblist(ptag_ids);
-
-  trim_ptags(result_ptags);
 
   return result_ptags;
 }
@@ -437,8 +434,7 @@ void basic_aggregate_func(
 {
   DBList *offset_ptags = likes_dict_to_ptags(likes_dict);
   DBListNode *offset_ptag_node = offset_ptags->head;
-  trim_ptags(current_ptags);
-  trim_ptags(offset_ptags);
+
   while (offset_ptag_node)
   {
     TagWithWeight *offset_ptag_with_w = parse_tag_with_weight(offset_ptag_node->data->value.string);
@@ -463,7 +459,6 @@ void basic_aggregate_func(
     offset_ptag_node = offset_ptag_node->next;
   }
   free_dblist(offset_ptags);
-  trim_ptags(current_ptags);
 }
 
 DBList *get_popular_tags()
