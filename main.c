@@ -16,7 +16,7 @@ int main()
   printf("calculated popular tags\n");
 
   run_simulations(
-      20, 50,
+      20, 25,
       basic_recommand_posts,
       basic_aggregate_func,
       NULL);

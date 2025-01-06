@@ -453,8 +453,12 @@ UserFeedback *get_popular_feedback(DBList *post_ids)
     {
       const char *post_id = post_id_node->data->value.string;
       const DBHashEntry *is_liked_entry = hget(feedback->likes_dict, post_id, NULL);
-      if (is_liked_entry && strcmp(is_liked_entry->data->value.string, "1") == 0)
-        hincrby(users_likes_dict, post_id, 1, NULL);
+      if (is_liked_entry)
+      {
+        dbobj_string_to_int(is_liked_entry->data);
+        hincrby(users_likes_dict, post_id, is_liked_entry->data->value.int_value, NULL);
+        dbobj_int_to_string(is_liked_entry->data);
+      }
       else
         hincrby(users_likes_dict, post_id, 0, NULL);
       post_id_node = post_id_node->next;
@@ -513,27 +517,39 @@ DBList *basic_recommand_posts(
     size_t iteration_i,
     size_t iteration_n)
 {
-  double iteration_rate = (double)iteration_i / (double)(iteration_n - 1);
+  double iteration_rate = ((double)iteration_i + 0.5) / (double)(iteration_n);
   double base_weight = pow(iteration_rate, RCM_BASE_WEIGHT_EXP);
   if (base_weight > 1.0)
     base_weight = 1.0;
   double test_weight = 1.0 - base_weight;
 
+  DBHash *recommanded_post_dict = ht_create();
   size_t base_part_count = count_posts_with_weight(count, base_weight);
   size_t test_part_count = count_posts_with_weight(count, test_weight);
 
   DBList *base_part = get_posts_by_ptags(ptags, base_part_count);
   DBList *test_part = get_posts_by_ptags(popular_ptags, test_part_count);
-  DBListNode *test_part_node = lpop(test_part);
 
-  while (test_part_node)
+  DBListNode *part_node = base_part->head;
+  while (part_node)
   {
-    rpush(base_part, test_part_node);
-    test_part_node = lpop(test_part);
+    hset(recommanded_post_dict, part_node->data->value.string, dbobj_create_bool(true), NULL);
+    part_node = part_node->next;
+  }
+  part_node = test_part->head;
+  while (part_node)
+  {
+    hset(recommanded_post_dict, part_node->data->value.string, dbobj_create_bool(true), NULL);
+    part_node = part_node->next;
   }
 
+  DBList *recommanded_posts = ht_keys(recommanded_post_dict, NULL);
+
+  ht_free(recommanded_post_dict);
+  free_dblist(base_part);
   free_dblist(test_part);
-  return get_posts_by_ptags(ptags, count);
+
+  return recommanded_posts;
 }
 
 void basic_aggregate_func(
@@ -542,7 +558,7 @@ void basic_aggregate_func(
     size_t iteration_i,
     size_t iteration_n)
 {
-  double iteration_rate = (double)iteration_i / (double)(iteration_n - 1);
+  double iteration_rate = ((double)iteration_i + 0.5) / (double)(iteration_n);
   double old_weight_rate = 0.75 * pow(iteration_rate, 0.5) + 0.25;
   if (old_weight_rate > 1.0)
     old_weight_rate = 1.0;
