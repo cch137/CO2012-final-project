@@ -1,7 +1,5 @@
 #include <stdio.h>
 
-#include "db/api.h"
-#include "db/interaction.h"
 #include "algorithms.h"
 #include "social_network.h"
 #include "database.h"
@@ -9,35 +7,27 @@
 int main()
 {
   printf("program start\n");
-  dbapi_start_server();
+  start_db();
 
   init_social_network();
   printf("social network inited\n");
 
-  DBList *popular_tags = get_popular_tags();
+  UserFeedback *popular_feedback = get_popular_feedback(NULL);
   printf("calculated popular tags\n");
 
-  dbapi_save();
-  printf("database saved to JSON file\n");
-
-  run_simulations(1000, 100, basic_recommand_posts, SQUARE, popular_tags);
+  run_simulations(100, 100, basic_recommand_posts, basic_aggregate_func, NULL);
   printf("simulations done\n");
-
-  DBListNode *popular_tags_node = popular_tags->head;
-  dbapi_set("user:popular:name", "popular");
-  while (popular_tags_node)
-  {
-    dbapi_rpush("user:popular:atags", popular_tags_node->data->value.string);
-    popular_tags_node = popular_tags_node->next;
-  }
-  free_dblist(popular_tags);
 
   clear_posts();
   printf("posts cleared\n");
 
-  dbapi_save();
+  save_db();
   printf("database saved to JSON file\n");
 
+  system("python analysis.py");
+  printf("analysis data to JSON file\n");
+
+  free_user_feedback(popular_feedback);
   printf("program end\n");
 
   return 0;

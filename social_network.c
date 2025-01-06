@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "db/types.h"
+#include "db/interaction.h"
 #include "db/utils.h"
 #include "db/hash.h"
 #include "db/list.h"
@@ -114,6 +115,22 @@ void trim_ptags(DBList *ptags)
     free_tag_with_weight(tag_with_w);
     node = node->next;
   }
+}
+
+void press_enter_to_continue()
+{
+  printf("Press Enter to continue...");
+  fflush(stdout);
+  while (getchar() != '\n')
+    ;
+}
+
+void print_dblist(DBList *ptags)
+{
+  DBObj *obj = dbobj_create_list(ptags);
+  print_dbobj(obj);
+  obj->value.list = NULL;
+  free_dbobj(obj);
 }
 
 // only use in init_social_network
@@ -253,42 +270,52 @@ static void reset_users_ptags(DBList *popular_ptags)
   free_dblist(user_ids);
 }
 
-static DBList *likes_dict_to_ptags(DBHash *likes_dict)
+static DBList *likes_dict_to_ptags(DBHash *likes_dict, size_t user_count)
 {
   DBList *post_ids = ht_keys(likes_dict, NULL);
-  DBHash *ptag_dict = ht_create();
+  // 當 tag 出現時，被按贊的次數
+  DBHash *tag_likes_dict = ht_create();
+  // tag 出現的總次數
+  DBHash *tag_total_dict = ht_create();
 
-  // 把 likes_dict 轉換成 ptag_dict
   DBListNode *post_id_node = post_ids->head;
   while (post_id_node)
   {
     const char *post_id = post_id_node->data->value.string;
-    const DBHashEntry *post_liked_entry = hget(likes_dict, post_id, NULL);
-    if (post_liked_entry)
-      dbobj_string_to_int(post_liked_entry->data);
-    const int post_liked_count = post_liked_entry ? post_liked_entry->data->value.int_value : 0;
+    const DBHashEntry *post_likes_entry = hget(likes_dict, post_id, NULL);
+    if (post_likes_entry)
+      dbobj_string_to_int(post_likes_entry->data);
+    const int post_likes_count = post_likes_entry ? post_likes_entry->data->value.int_value : 0;
+    if (post_likes_entry)
+      dbobj_int_to_string(post_likes_entry->data);
     DBList *post_tags = get_post_tags(post_id);
     DBListNode *tag_node = post_tags->head;
     while (tag_node)
     {
       const char *tag_id = tag_node->data->value.string;
-      hincrby(ptag_dict, tag_id, post_liked_count, NULL);
+      hincrby(tag_likes_dict, tag_id, post_likes_count, NULL);
+      hincrby(tag_total_dict, tag_id, user_count, NULL);
       tag_node = tag_node->next;
     }
     free_dblist(post_tags);
     post_id_node = post_id_node->next;
   }
 
-  // 把 ptag_dict 轉換成 result_ptags
   DBList *result_ptags = create_dblist();
-  DBList *ptag_ids = ht_keys(ptag_dict, NULL);
+  DBList *ptag_ids = ht_keys(tag_total_dict, NULL);
   DBListNode *ptag_id_node = ptag_ids->head;
   while (ptag_id_node)
   {
     const char *ptag_id = ptag_id_node->data->value.string;
-    const DBHashEntry *ptag_entry = hget(ptag_dict, ptag_id, NULL);
-    dbobj_string_to_int(ptag_entry->data);
-    const double ptag_w = (double)ptag_entry->data->value.int_value / (double)post_ids->length;
+    const DBHashEntry *tag_likes_entry = hget(tag_likes_dict, ptag_id, NULL);
+    const DBHashEntry *tag_total_entry = hget(tag_total_dict, ptag_id, NULL);
+    dbobj_string_to_int(tag_likes_entry->data);
+    dbobj_string_to_int(tag_total_entry->data);
+    const double ptag_likes_count = (double)tag_likes_entry->data->value.int_value;
+    const double ptag_total_count = (double)tag_total_entry->data->value.int_value;
+    dbobj_int_to_string(tag_likes_entry->data);
+    dbobj_int_to_string(tag_total_entry->data);
+    const double ptag_w = ptag_likes_count / ptag_total_count;
     TagWithWeight *tag_with_w = create_tag_with_weight(ptag_id, ptag_w);
     char *serialized_ptags = serialize_tag_with_weight(tag_with_w);
     rpush(result_ptags, create_dblistnode_with_string(serialized_ptags));
@@ -297,11 +324,40 @@ static DBList *likes_dict_to_ptags(DBHash *likes_dict)
     ptag_id_node = ptag_id_node->next;
   }
 
-  ht_free(ptag_dict);
+  ht_free(tag_likes_dict);
+  ht_free(tag_total_dict);
   free_dblist(post_ids);
   free_dblist(ptag_ids);
 
   return result_ptags;
+}
+
+UserFeedback *create_user_feedback(
+    DBHash *likes_dict_source,
+    size_t users_count,
+    size_t likes_count,
+    size_t posts_count)
+{
+  UserFeedback *feedback = (UserFeedback *)malloc(sizeof(UserFeedback));
+  if (!feedback)
+    EXIT_ON_MEMORY_ERROR();
+
+  feedback->likes_dict = likes_dict_source;
+  feedback->ptags = likes_dict_to_ptags(likes_dict_source, users_count);
+  feedback->users_count = users_count;
+  feedback->likes_count = likes_count;
+  feedback->posts_count = posts_count;
+
+  return feedback;
+}
+
+void free_user_feedback(UserFeedback *feedback)
+{
+  if (!feedback)
+    return;
+  ht_free(feedback->likes_dict);
+  free_dblist(feedback->ptags);
+  free(feedback);
 }
 
 static double calculate_post_like_probability(const char *post_id, DBList *atags)
@@ -335,55 +391,82 @@ end:
   return like_probability > 1 ? 1 : like_probability;
 }
 
-DBHash *get_user_feedback(const char *user_id, DBList *post_ids)
+UserFeedback *get_user_feedback(const char *user_id, DBList *post_ids)
 {
   DBList *user_atags = get_user_atags(user_id);
   DBHash *likes_dict = ht_create();
   DBListNode *post_node = post_ids->head;
+  size_t likes_count = 0;
+  size_t posts_count = 0;
 
   while (post_node)
   {
     const char *post_id = post_node->data->value.string;
 
     if (drand() < calculate_post_like_probability(post_id, user_atags))
+    {
       hincrby(likes_dict, post_id, 1, NULL);
+      ++likes_count;
+    }
+    else
+    {
+      hincrby(likes_dict, post_id, 0, NULL);
+    }
 
+    ++posts_count;
     post_node = post_node->next;
   }
 
   free_dblist(user_atags);
 
-  return likes_dict;
+  return create_user_feedback(likes_dict, 1, likes_count, posts_count);
 }
 
-DBHash *get_popular_feedback(DBList *post_ids)
+UserFeedback *get_popular_feedback(DBList *post_ids)
 {
+  bool pass_posts = true;
+
+  if (!post_ids)
+  {
+    pass_posts = false;
+    post_ids = get_post_ids();
+  }
+
   DBList *user_ids = get_user_ids();
   DBHash *users_likes_dict = ht_create();
+  UserFeedback *popular_feedback = create_user_feedback(users_likes_dict, user_ids->length, 0, post_ids->length);
 
   DBListNode *user_id_node = user_ids->head;
   while (user_id_node)
   {
     const char *user_id = user_id_node->data->value.string;
-    DBHash *user_likes_dict = get_user_feedback(user_id, post_ids);
+    UserFeedback *feedback = get_user_feedback(user_id, post_ids);
 
     DBListNode *post_id_node = post_ids->head;
     while (post_id_node)
     {
       const char *post_id = post_id_node->data->value.string;
-      const DBHashEntry *is_liked_entry = hget(user_likes_dict, post_id, NULL);
+      const DBHashEntry *is_liked_entry = hget(feedback->likes_dict, post_id, NULL);
       if (is_liked_entry && strcmp(is_liked_entry->data->value.string, "1") == 0)
         hincrby(users_likes_dict, post_id, 1, NULL);
+      else
+        hincrby(users_likes_dict, post_id, 0, NULL);
       post_id_node = post_id_node->next;
     }
 
-    ht_free(user_likes_dict);
+    popular_feedback->likes_count += feedback->likes_count;
+    free_user_feedback(feedback);
     user_id_node = user_id_node->next;
   }
 
   free_dblist(user_ids);
 
-  return users_likes_dict;
+  if (!pass_posts)
+  {
+    free_dblist(post_ids);
+  }
+
+  return popular_feedback;
 }
 
 DBList *get_posts_by_ptags(DBList *ptags, size_t limit)
@@ -419,21 +502,37 @@ DBList *get_posts_by_ptags(DBList *ptags, size_t limit)
 
 DBList *basic_recommand_posts(
     DBList *ptags,
+    DBList *popular_ptags,
     size_t limit,
     size_t iteration_i,
     size_t iteration_n)
 {
+  double iteration_rate = (double)iteration_i / (double)(iteration_n - 1);
+  double base_weight = pow(iteration_rate, BASE_WEIGHT_EXP);
+  if (base_weight > 1.0)
+    base_weight = 1.0;
+  double test_weight = 1.0 - base_weight;
+  size_t base_part_limit = (size_t)((double)limit * base_weight);
+  size_t test_part_limit = (size_t)((double)limit * test_weight);
+  DBList *base_part = get_posts_by_ptags(ptags, base_part_limit);
+  DBList *test_part = get_posts_by_ptags(popular_ptags, test_part_limit);
+  DBListNode *test_part_node = lpop(test_part);
+  while (test_part_node)
+  {
+    rpush(base_part, test_part_node);
+    test_part_node = lpop(test_part);
+  }
+  free_dblist(test_part);
   return get_posts_by_ptags(ptags, limit);
 }
 
 void basic_aggregate_func(
     DBList *current_ptags,
-    DBHash *likes_dict,
+    UserFeedback *user_feedback,
     size_t iteration_i,
     size_t iteration_n)
 {
-  DBList *offset_ptags = likes_dict_to_ptags(likes_dict);
-  DBListNode *offset_ptag_node = offset_ptags->head;
+  DBListNode *offset_ptag_node = user_feedback->ptags->head;
 
   while (offset_ptag_node)
   {
@@ -458,17 +557,6 @@ void basic_aggregate_func(
     free_tag_with_weight(offset_ptag_with_w);
     offset_ptag_node = offset_ptag_node->next;
   }
-  free_dblist(offset_ptags);
-}
-
-DBList *get_popular_tags()
-{
-  DBList *post_ids = get_post_ids();
-  DBHash *likes_dict = get_popular_feedback(post_ids);
-  free_dblist(post_ids);
-  DBList *popular_ptags = likes_dict_to_ptags(likes_dict);
-
-  return popular_ptags;
 }
 
 void run_simulations(
@@ -478,12 +566,44 @@ void run_simulations(
     AggregatePTagsFunc aggregate_func,
     DBList *popular_ptags)
 {
-  reset_users_ptags(popular_ptags);
+  DBList *used_popular_ptags = create_dblist();
+
+  if (popular_ptags)
+  {
+    DBListNode *tag_id_node = popular_ptags->head;
+    while (tag_id_node)
+    {
+      char *serialized_tag = tag_id_node->data->value.string;
+      rpush(used_popular_ptags, create_dblistnode_with_string(serialized_tag));
+      tag_id_node = tag_id_node->next;
+    }
+  }
+  else
+  {
+    DBList *tag_ids = get_tag_ids();
+    DBListNode *tag_id_node = tag_ids->head;
+    while (tag_id_node)
+    {
+      TagWithWeight *tag_with_w = create_tag_with_weight(tag_id_node->data->value.string, 0.5);
+      char *serialized_tag = serialize_tag_with_weight(tag_with_w);
+      rpush(used_popular_ptags, create_dblistnode_with_string(serialized_tag));
+      free(serialized_tag);
+      free_tag_with_weight(tag_with_w);
+      tag_id_node = tag_id_node->next;
+    }
+    free_dblist(tag_ids);
+  }
+
+  char *popular_id = get_user_id_by_name(POPULAR_USER_NAME);
+  delete_user(popular_id);
+  free(popular_id);
+  reset_users_ptags(used_popular_ptags);
 
   const size_t n = iteration_count;
   DBList *user_ids = get_user_ids();
 
   // TODO: 每一輪 simulation 完成後，計算演算法評分
+  double like_rate = 0;
   for (size_t i = 0; i < n; ++i)
   {
     printf("run simulation (%lu/%lu)\n", i + 1, n);
@@ -492,15 +612,21 @@ void run_simulations(
     {
       const char *user_id = user_id_node->data->value.string;
       DBList *user_ptags = get_user_ptags(user_id);
-      DBList *post_ids = recommanded_posts_func(user_ptags, posts_recommanded_per_round, i, n);
-      DBHash *likes_dict = get_user_feedback(user_id, post_ids);
-      aggregate_func(user_ptags, likes_dict, i, n);
+      DBList *post_ids = recommanded_posts_func(user_ptags, used_popular_ptags, posts_recommanded_per_round, i, n);
+      UserFeedback *feedback = get_user_feedback(user_id, post_ids);
+      aggregate_func(user_ptags, feedback, i, n);
       set_user_ptags(user_id, user_ptags);
       free_dblist(post_ids);
-      ht_free(likes_dict);
+      free_user_feedback(feedback);
       user_id_node = user_id_node->next;
     }
   }
 
+  popular_id = create_user_with_id_returned(POPULAR_USER_NAME, used_popular_ptags);
+
+  save_db();
+
+  free(popular_id);
   free_dblist(user_ids);
+  free_dblist(used_popular_ptags);
 }

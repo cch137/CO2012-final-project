@@ -41,21 +41,6 @@ static bool ends_with(const char *str, const char *suffix)
   return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
 }
 
-// 工具函數：檢查鍵的合法性
-static bool is_valid_key(const char *key)
-{
-  const char invalid_chars[] = "*:[]?\\";
-  while (*key)
-  {
-    if (strchr(invalid_chars, *key))
-    {
-      return false;
-    }
-    key++;
-  }
-  return true;
-}
-
 char *generate_oid()
 {
   static uint64_t last_timestamp = 0;
@@ -197,6 +182,46 @@ void create_user(const char *name, DBList *atags)
   free(create_user_with_id_returned(name, atags));
 }
 
+char *get_user_id_by_name(const char *name)
+{
+  DBList *user_ids = get_user_ids();
+  DBListNode *curr = user_ids->head;
+  while (curr)
+  {
+    const char *user_id = curr->data->value.string;
+    char *query_key = create_query_key(USER_NS, user_id, NAME_FIELD_NAME);
+    const char *user_name = dbapi_get(query_key);
+    free(query_key);
+    if (user_name && strcmp(user_name, name) == 0)
+    {
+      char *oid = dbutil_strdup(user_id);
+      free_dblist(user_ids);
+      return oid;
+    }
+    curr = curr->next;
+  }
+  free_dblist(user_ids);
+  return NULL;
+}
+
+void delete_user(const char *oid)
+{
+  if (!oid)
+    return;
+
+  char *query_key = create_query_key(USER_NS, oid, NAME_FIELD_NAME);
+  dbapi_del(query_key);
+  free(query_key);
+
+  query_key = create_query_key(USER_NS, oid, ATAGS_FIELD_NAME);
+  dbapi_del(query_key);
+  free(query_key);
+
+  query_key = create_query_key(USER_NS, oid, PTAGS_FIELD_NAME);
+  dbapi_del(query_key);
+  free(query_key);
+}
+
 DBList *get_post_ids()
 {
   return get_namespace_ids(POST_NS_PREFIX, TAGS_FIELD_SUFFIX);
@@ -329,7 +354,18 @@ db_bool_t set_user_ptags(const char *user_id, DBList *tags)
   return true; // 成功更新 s，返回 true
 }
 
+void start_db(void)
+{
+  dbapi_start_server();
+}
+
+void save_db(void)
+{
+  dbapi_save();
+}
+
 void flush_all(void)
 {
   dbapi_flushall();
+  save_db();
 }

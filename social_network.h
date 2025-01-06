@@ -1,10 +1,29 @@
 #ifndef SOCIAL_NETWORK_H
 #define SOCIAL_NETWORK_H
 
+#define BASE_WEIGHT_EXP ((double)2)
+
 #include <stddef.h>
 #include <stdbool.h>
 
 #include "db/types.h"
+
+typedef struct UserFeedback
+{
+  DBHash *likes_dict;
+  DBList *ptags;
+  size_t users_count;
+  size_t likes_count;
+  size_t posts_count;
+} UserFeedback;
+
+UserFeedback *create_user_feedback(
+    DBHash *likes_dict_source,
+    size_t users_count,
+    size_t likes_count,
+    size_t posts_count);
+
+void free_user_feedback(UserFeedback *feedback);
 
 typedef struct
 {
@@ -23,12 +42,17 @@ TagWithWeight *parse_tag_with_weight(const char *tag_with_weight);
 
 void trim_ptags(DBList *ptags);
 
+void press_enter_to_continue();
+
+void print_dblist(DBList *ptags);
+
 // 提供推薦貼文列表
 // 根據使用者的預測標籤 (ptags)，回傳指定數量 (limit) 的貼文 ID 列表。
 // ptags 需由呼叫者負責釋放，limit 為回傳的實際數量。
 // iteration_i 表示當前迭代次數，iteration_n 表示總迭代次數。
 typedef DBList *(*RecommandPostsFunc)(
     DBList *ptags,
+    DBList *popular_ptags,
     size_t limit,
     size_t iteration_i,
     size_t iteration_n);
@@ -39,7 +63,7 @@ typedef DBList *(*RecommandPostsFunc)(
 // iteration_i 表示當前迭代次數，iteration_n 表示總迭代次數。
 typedef void (*AggregatePTagsFunc)(
     DBList *current_ptags,
-    DBHash *likes_dict,
+    UserFeedback *user_feedback,
     size_t iteration_i,
     size_t iteration_n);
 
@@ -50,28 +74,27 @@ void init_social_network(void);
 // 獲取單一使用者的按贊行為
 // 模擬使用者根據 atags 的機率對指定貼文 (post_ids) 進行按贊。
 // 回傳的 Hash 中，key 為貼文 ID，value 為 "1" (贊) 或 "0" (未贊)。
-DBHash *get_user_feedback(const char *user_id, DBList *post_ids);
+UserFeedback *get_user_feedback(const char *user_id, DBList *post_ids);
 
 // 獲取多名使用者的按贊統計
 // 模擬所有使用者根據 atags 的機率對指定貼文 (post_ids) 進行按贊。
 // 回傳的 Hash 中，key 為貼文 ID，value 為總獲贊數。
-DBHash *get_popular_feedback(DBList *post_ids);
+UserFeedback *get_popular_feedback(DBList *post_ids);
 
 DBList *get_posts_by_ptags(DBList *ptags, size_t limit);
 
 DBList *basic_recommand_posts(
     DBList *ptags,
+    DBList *popular_ptags,
     size_t limit,
     size_t iteration_i,
     size_t iteration_n);
 
 void basic_aggregate_func(
     DBList *current_ptags,
-    DBHash *likes_dict,
+    UserFeedback *user_feedback,
     size_t iteration_i,
     size_t iteration_n);
-
-DBList *get_popular_tags();
 
 // 執行模擬流程
 // 為每位使用者推薦指定數量 (posts_recommanded_per_round) 的貼文，並進行指定次數的迭代 (iteration_count)。
@@ -81,6 +104,6 @@ void run_simulations(
     size_t iteration_count,
     RecommandPostsFunc recommanded_posts_func,
     AggregatePTagsFunc aggregate_func,
-    DBList *popular_tags);
+    DBList *popular_ptags);
 
 #endif

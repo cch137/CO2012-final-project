@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "db/list.h"
 #include "db/hash.h"
@@ -27,40 +28,51 @@
 
 DBList *generate_personality(DBHash *likes_dict)
 {
-  DBList *all_posts = ht_keys(likes_dict, NULL);
-  DBList *all_id = get_post_ids();
+  DBList *all_viewed_posts = ht_keys(likes_dict, NULL);
+  DBList *all_id = get_tag_ids();
   DBList *new_p_tag = create_dblist();
 
-  DBListNode *post_node = all_posts->head;
+  DBListNode *post_node = all_viewed_posts->head;
   DBListNode *id_node = all_id->head;
   TagWithWeight *string = create_tag_with_weight("1", 1);
 
   size_t post_count = 0;
-  size_t liked_count = 0;
-  while (id_node)
+  double liked_count = 0;
+
+  while (id_node != NULL)
   {
     string->id = id_node->data->value.string;
-    while (post_node)
+    while (post_node != NULL)
     {
-      char *a = parse_oid(post_node->data->value.string);
-      if (strcmp(string->id, a) == 0)
+      DBList *a = get_post_tags(post_node->data->value.string);
+      if (strcmp(string->id, a->head->data->value.string) == 0)
       {
         post_count++;
-        liked_count += (strcmp(post_node->data->value.string, "1") == 0) ? 1 : 0;
+        liked_count += (strcmp(hget(likes_dict, post_node->data->value.string, NULL)->data->value.string, "0") == 0) ? 1 : 0;
       }
       post_node = post_node->next;
-      if (a)
-        free(a);
+      free(a);
     }
-    post_node = all_posts->head;
-    string->weight = (double)liked_count / post_count;
+    post_node = all_viewed_posts->head;
+    if (post_count != 0)
+    {
+      string->weight = (double)liked_count / post_count;
+    }
+    else
+    {
+      string->weight = 0;
+    }
+    printf("%d %f\n", liked_count, post_count);
+    printf("%s %f\n", string->id, string->weight);
     rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_with_weight(string)));
     id_node = id_node->next;
   }
 
-  free_tag_with_weight(string);
-  free_dblist(all_posts);
+  free_dblist(all_viewed_posts);
   free_dblist(all_id);
+
+  s_print_dblist(new_p_tag);
+
   return new_p_tag;
 }
 
@@ -311,4 +323,20 @@ double s_direct(double input)
 double s_curve(double input)
 {
   return curve_begin * (input - 1) * (input - 1);
+}
+
+static void s_print_dblist(DBList *old_p_tag)
+{
+  DBListNode *node = old_p_tag->head;
+
+  TagWithWeight *string = create_tag_with_weight("1", 1);
+
+  while (node)
+  {
+    string = parse_tag_with_weight(node->data->value.string);
+    printf("%s: %f\n", string->id, string->weight);
+    node = node->next;
+  }
+
+  free_tag_with_weight(string);
 }

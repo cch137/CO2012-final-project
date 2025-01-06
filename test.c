@@ -6,6 +6,7 @@
 
 #include "db/utils.h"
 #include "database.h"
+#include "algorithms.h"
 
 #define RESULT_PASS "\033[0;32mPASS\033[0m"
 #define RESULT_FAIL "\033[0;31mFAIL\033[0m"

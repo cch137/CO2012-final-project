@@ -21,15 +21,20 @@ def repalce_tag_id(tag: str):
     return tag
 
 
-for user_id in user_dict:
-    user_dict[user_id]["atags"] = sorted(
+result_dict = {}
+
+for user_id in sorted(user_dict.keys()):
+    user_name = user_dict[user_id]["name"]
+    user = {}
+    user["atags"] = sorted(
         [repalce_tag_id(i) for i in data.get(f"user:{user_id}:atags", [])]
     )
-    user_dict[user_id]["ptags"] = sorted(
+    user["ptags"] = sorted(
         [repalce_tag_id(i) for i in data.get(f"user:{user_id}:ptags", [])]
     )
+    result_dict[user_name] = user
 
-stringified = json.dumps(user_dict, indent=4, sort_keys=True)
+stringified = json.dumps(result_dict, indent=4, sort_keys=True)
 
 with open("analysis.json", "w") as f:
     f.write(stringified)

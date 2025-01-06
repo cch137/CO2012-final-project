@@ -1,6 +1,8 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 
+#define POPULAR_USER_NAME "popular"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -25,6 +27,10 @@ DBList *get_user_ids();
 char *create_user_with_id_returned(const char *name, DBList *atags);
 
 void create_user(const char *name, DBList *atags);
+
+char *get_user_id_by_name(const char *name);
+
+void delete_user(const char *oid);
 
 // 取得所有貼文的 OID。呼叫者需釋放回傳的陣列。
 // 呼叫者負責釋放傳回的字串陣列。
@@ -63,6 +69,10 @@ db_bool_t set_user_atags(const char *user_id, DBList *tags);
 DBList *get_user_ptags(const char *user_id);
 
 db_bool_t set_user_ptags(const char *user_id, DBList *tags);
+
+void start_db(void);
+
+void save_db(void);
 
 // 清空整個資料庫
 void flush_all(void);

@@ -67,4 +67,6 @@ double s_direct(double input);
 // 讓p_tag總和變為1
 void s_repair(DBList *old_p_tag);
 
+static void s_print_dblist(DBList *old_p_tag);
+
 #endif
