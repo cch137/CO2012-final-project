@@ -34,7 +34,7 @@ DBList *generate_personality(DBHash *likes_dict)
 
   DBListNode *post_node = all_viewed_posts->head;
   DBListNode *id_node = all_id->head;
-  TagWithWeight *string = create_tag_with_weight("1", 1);
+  TagWithWeight *string = create_tag_w("1", 1);
 
   size_t post_count = 0;
   double liked_count = 0;
@@ -64,7 +64,7 @@ DBList *generate_personality(DBHash *likes_dict)
     }
     printf("%d %f\n", liked_count, post_count);
     printf("%s %f\n", string->id, string->weight);
-    rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_with_weight(string)));
+    rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_w(string)));
     id_node = id_node->next;
   }
 
@@ -79,7 +79,7 @@ DBList *generate_personality(DBHash *likes_dict)
 DBList *add_random_to_tag(DBList *personal_p_tag, DBList *public_p_tag, double propotion)
 {
   DBList *new_p_tag = create_dblist();
-  TagWithWeight *new_string = create_tag_with_weight("1", 1);
+  TagWithWeight *new_string = create_tag_w("1", 1);
 
   if (propotion == -1)
   {
@@ -90,20 +90,20 @@ DBList *add_random_to_tag(DBList *personal_p_tag, DBList *public_p_tag, double p
     DBListNode *personal_node = personal_p_tag->head;
     DBListNode *public_node = public_p_tag->head;
 
-    TagWithWeight *personal_string = create_tag_with_weight("1", 1);
-    TagWithWeight *public_string = create_tag_with_weight("1", 1);
+    TagWithWeight *personal_string = create_tag_w("1", 1);
+    TagWithWeight *public_string = create_tag_w("1", 1);
     while (public_node)
     {
-      public_string = parse_tag_with_weight(public_node->data->value.string);
+      public_string = parse_tag_w(public_node->data->value.string);
       while (personal_node)
       {
-        personal_string = parse_tag_with_weight(personal_node->data->value.string);
+        personal_string = parse_tag_w(personal_node->data->value.string);
         if (strcmp(public_string->id, personal_string->id) == 0)
         {
           new_string->weight = (1 - propotion) * personal_string->weight;
           new_string->weight += public_string->weight * propotion;
 
-          rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_with_weight(new_string)));
+          rpush(new_p_tag, create_dblistnode_with_string(serialize_tag_w(new_string)));
           break;
         }
         personal_node = personal_node->next;
@@ -111,25 +111,25 @@ DBList *add_random_to_tag(DBList *personal_p_tag, DBList *public_p_tag, double p
       personal_node = personal_p_tag->head;
       public_node = public_node->next;
     }
-    free_tag_with_weight(personal_string);
-    free_tag_with_weight(public_string);
+    free_tag_w(personal_string);
+    free_tag_w(public_string);
   }
   else
   {
     DBListNode *personal_node = personal_p_tag->head;
-    TagWithWeight *personal_string = create_tag_with_weight("1", 1);
+    TagWithWeight *personal_string = create_tag_w("1", 1);
     while (personal_node)
     {
-      personal_string = parse_tag_with_weight(personal_node->data->value.string);
+      personal_string = parse_tag_w(personal_node->data->value.string);
 
       personal_string->weight = (1 - propotion) * personal_string->weight;
       personal_string->weight += propotion * ((double)rand() / (RAND_MAX + 1.0));
 
       personal_node = personal_node->next;
     }
-    free_tag_with_weight(personal_string);
+    free_tag_w(personal_string);
   }
-  free_tag_with_weight(new_string);
+  free_tag_w(new_string);
   return new_p_tag;
 }
 
@@ -175,20 +175,20 @@ void s_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit
   DBListNode *old_node = old_p_tag->head;
   DBListNode *new_node = new_p_tag->head;
 
-  TagWithWeight *old_string = create_tag_with_weight("1", 1);
-  TagWithWeight *new_string = create_tag_with_weight("1", 1);
+  TagWithWeight *old_string = create_tag_w("1", 1);
+  TagWithWeight *new_string = create_tag_w("1", 1);
   while (new_node)
   {
-    new_string = parse_tag_with_weight(new_node->data->value.string);
+    new_string = parse_tag_w(new_node->data->value.string);
     while (old_node)
     {
-      old_string = parse_tag_with_weight(old_node->data->value.string);
+      old_string = parse_tag_w(old_node->data->value.string);
       if (strcmp(old_string->id, new_string->id) == 0)
       {
         old_string->weight = (1 - s_curve(time / limit)) * old_string->weight;
         old_string->weight += s_curve(time / limit) * algorithm[algo_type](new_string->weight);
 
-        old_node->data->value.string = serialize_tag_with_weight(old_string);
+        old_node->data->value.string = serialize_tag_w(old_string);
 
         break;
       }
@@ -197,32 +197,32 @@ void s_aggregate(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit
     old_node = old_p_tag->head;
     new_node = new_node->next;
   }
-  free_tag_with_weight(old_string);
-  free_tag_with_weight(new_string);
+  free_tag_w(old_string);
+  free_tag_w(new_string);
 }
 
 void s_cut(DBList *old_p_tag)
 {
   DBListNode *node = old_p_tag->head;
 
-  TagWithWeight *string = create_tag_with_weight("1", 1);
+  TagWithWeight *string = create_tag_w("1", 1);
 
   while (node)
   {
-    string = parse_tag_with_weight(node->data->value.string);
+    string = parse_tag_w(node->data->value.string);
     string->weight = s_relu(string->weight);
-    node->data->value.string = serialize_tag_with_weight(string);
+    node->data->value.string = serialize_tag_w(string);
     node = node->next;
   }
 
-  free_tag_with_weight(string);
+  free_tag_w(string);
 }
 
 void s_repair(DBList *old_p_tag)
 {
   DBListNode *node = old_p_tag->head;
 
-  TagWithWeight *string = create_tag_with_weight("1", 1);
+  TagWithWeight *string = create_tag_w("1", 1);
 
   double sum = 0;
   size_t count = 0;
@@ -230,7 +230,7 @@ void s_repair(DBList *old_p_tag)
   // 算總和，得出要除的比例
   while (node)
   {
-    string = parse_tag_with_weight(node->data->value.string);
+    string = parse_tag_w(node->data->value.string);
     sum += string->weight;
     node = node->next;
     count++;
@@ -242,13 +242,13 @@ void s_repair(DBList *old_p_tag)
   // 除完存回去
   while (node)
   {
-    string = parse_tag_with_weight(node->data->value.string);
+    string = parse_tag_w(node->data->value.string);
     string->weight /= propotion;
-    node->data->value.string = serialize_tag_with_weight(string);
+    node->data->value.string = serialize_tag_w(string);
     node = node->next;
   }
 
-  free_tag_with_weight(string);
+  free_tag_w(string);
 }
 
 void s_aggregate_cut_repair(DBList *old_p_tag, DBList *new_p_tag, size_t time, size_t limit, type_of_algorithm s_type)
@@ -329,14 +329,14 @@ static void s_print_dblist(DBList *old_p_tag)
 {
   DBListNode *node = old_p_tag->head;
 
-  TagWithWeight *string = create_tag_with_weight("1", 1);
+  TagWithWeight *string = create_tag_w("1", 1);
 
   while (node)
   {
-    string = parse_tag_with_weight(node->data->value.string);
+    string = parse_tag_w(node->data->value.string);
     printf("%s: %f\n", string->id, string->weight);
     node = node->next;
   }
 
-  free_tag_with_weight(string);
+  free_tag_w(string);
 }

@@ -16,9 +16,11 @@
 #define USER_NS "user"
 #define POST_NS "post"
 #define TAG_NS "tag"
+#define INDEX_NS "index"
 #define USER_NS_PREFIX "user:"
 #define POST_NS_PREFIX "post:"
 #define TAG_NS_PREFIX "tag:"
+#define INDEX_NS_PREFIX "index:"
 #define NAME_FIELD_NAME "name"
 #define TAGS_FIELD_NAME "tags"
 #define NAME_FIELD_SUFFIX ":name"
@@ -41,7 +43,7 @@ static bool ends_with(const char *str, const char *suffix)
   return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
 }
 
-char *generate_oid()
+static char *generate_oid()
 {
   static uint64_t last_timestamp = 0;
   static uint16_t sequence = 0;
@@ -85,7 +87,9 @@ char *generate_oid()
   return oid;
 }
 
-char *parse_oid(const char *query_key)
+// 提取 key 的 OID，回傳一個新的 char * 用完要記得 free
+// 若找無，回傳 NULL。
+static char *parse_oid(const char *query_key)
 {
   if (!query_key)
     return NULL;
@@ -138,15 +142,15 @@ static DBList *get_namespace_ids(const char *ns_prefix, const char *suffix)
 static char *create_query_key(const char *namespace, const char *id, const char *field_name)
 {
   // 3 = 2 * strlen(":") + 1;
-  const size_t key_length = strlen(namespace) + strlen(id) + strlen(field_name) + 3;
+  const size_t key_length = strlen(namespace) + strlen(id) + (field_name ? strlen(field_name) : 0) + 3;
   char *key = (char *)malloc(key_length);
   if (!key)
     EXIT_ON_MEMORY_ERROR();
-  snprintf(key, key_length, "%s:%s:%s", namespace, id, field_name);
+  snprintf(key, key_length, "%s:%s:%s", namespace, id, field_name ? field_name : "");
   return key;
 }
 
-static void util_dbapi_set_list(const char *key, DBList *list)
+static void db_set_list(const char *key, DBList *list)
 {
   dbapi_del(key);
   DBListNode *node = list->head;
@@ -171,7 +175,7 @@ char *create_user_with_id_returned(const char *name, DBList *atags)
   free(query_key);
 
   query_key = create_query_key(USER_NS, oid, ATAGS_FIELD_NAME);
-  util_dbapi_set_list(query_key, atags);
+  db_set_list(query_key, atags);
   free(query_key);
 
   return oid;
@@ -232,7 +236,7 @@ char *create_post_with_id_returned(DBList *tags)
   char *oid = generate_oid(oid);
 
   char *query_key = create_query_key(POST_NS, oid, TAGS_FIELD_NAME);
-  util_dbapi_set_list(query_key, tags);
+  db_set_list(query_key, tags);
   free(query_key);
 
   return oid;
@@ -243,7 +247,24 @@ void create_post(DBList *tags)
   free(create_post_with_id_returned(tags));
 }
 
-void clear_posts()
+void create_post_indexes()
+{
+  DBList *tags = get_tag_ids();
+  DBListNode *curr = tags->head;
+  while (curr)
+  {
+    char *tag_id = curr->data->value.string;
+    char *query_key = create_query_key(INDEX_NS, tag_id, NULL);
+    DBList *posts = get_posts_by_tag(tag_id, -1, false);
+    db_set_list(query_key, posts);
+    free(query_key);
+    free_dblist(posts);
+    curr = curr->next;
+  }
+  free_dblist(tags);
+}
+
+void delete_posts()
 {
   DBList *list = dbapi_keys();
   DBListNode *curr = list->head;
@@ -251,7 +272,7 @@ void clear_posts()
   while (curr)
   {
     const char *key = curr->data->value.string;
-    if (starts_with(key, POST_NS_PREFIX))
+    if (starts_with(key, POST_NS_PREFIX) || starts_with(key, INDEX_NS_PREFIX))
       dbapi_del(key);
     curr = curr->next;
   }
@@ -268,8 +289,16 @@ DBList *get_post_tags(const char *post_id)
   return post_tags;
 }
 
-DBList *get_posts_by_tag(const char *tag_id, size_t limit)
+DBList *get_posts_by_tag(const char *tag_id, size_t limit, const bool by_index)
 {
+  if (by_index)
+  {
+    char *query_key = create_query_key(INDEX_NS, tag_id, NULL);
+    DBList *posts = dbapi_lrange(query_key, 0, limit);
+    free(query_key);
+    return posts;
+  }
+
   DBList *filtered_post_ids = create_dblist();
   DBList *post_ids = get_post_ids();
   DBListNode *post_id_node = post_ids->head;
@@ -330,7 +359,7 @@ DBList *get_user_atags(const char *user_id)
 db_bool_t set_user_atags(const char *user_id, DBList *tags)
 {
   char *query_key = create_query_key(USER_NS, user_id, ATAGS_FIELD_NAME);
-  util_dbapi_set_list(query_key, tags);
+  db_set_list(query_key, tags);
   free(query_key);
 
   return true; // 成功更新 atags，返回 true
@@ -348,7 +377,7 @@ DBList *get_user_ptags(const char *user_id)
 db_bool_t set_user_ptags(const char *user_id, DBList *tags)
 {
   char *query_key = create_query_key(USER_NS, user_id, PTAGS_FIELD_NAME);
-  util_dbapi_set_list(query_key, tags);
+  db_set_list(query_key, tags);
   free(query_key);
 
   return true; // 成功更新 s，返回 true
