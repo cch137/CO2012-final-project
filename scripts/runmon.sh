@@ -95,9 +95,8 @@ function detect_entry_points {
 function clear_and_echo_banner {
     echo -e "\e[0m\e[1;31m"
     clear
-    echo -e " _ _ _  _ _ _  _ __  ___ _ _   "
-    echo -e "| '_| || | ' \| '  \/ _ \ ' \  "
-    echo -e "|_|  \_,_|_||_|_|_|_\___/_||_| "
+    echo -e  "|_) | | |\ | |\/| / \ |\ | "
+    echo -e  "| \ |_| | \| |  | \_/ | \| "
     echo -e "\e[0m"
 }
 
