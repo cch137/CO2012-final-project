@@ -15,7 +15,11 @@ int main()
   UserFeedback *popular_feedback = get_popular_feedback(NULL);
   printf("calculated popular tags\n");
 
-  run_simulations(100, 100, basic_recommand_posts, basic_aggregate_func, NULL);
+  run_simulations(
+      20, 50,
+      basic_recommand_posts,
+      basic_aggregate_func,
+      NULL);
   printf("simulations done\n");
 
   clear_posts();

@@ -1,7 +1,12 @@
 #ifndef SOCIAL_NETWORK_H
 #define SOCIAL_NETWORK_H
 
-#define BASE_WEIGHT_EXP ((double)2)
+#define TOTAL_USERS 5
+#define TOTAL_POSTS 1000
+
+#define RCM_BASE_WEIGHT_EXP ((double)2.0)
+
+#define CLEAN_PTAG_THRESHOLD ((double)0.005)
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -15,6 +20,7 @@ typedef struct UserFeedback
   size_t users_count;
   size_t likes_count;
   size_t posts_count;
+  double likes_rate;
 } UserFeedback;
 
 UserFeedback *create_user_feedback(
@@ -47,13 +53,13 @@ void press_enter_to_continue();
 void print_dblist(DBList *ptags);
 
 // 提供推薦貼文列表
-// 根據使用者的預測標籤 (ptags)，回傳指定數量 (limit) 的貼文 ID 列表。
-// ptags 需由呼叫者負責釋放，limit 為回傳的實際數量。
+// 根據使用者的預測標籤 (ptags)，回傳指定數量 (count) 的貼文 ID 列表。
+// ptags 需由呼叫者負責釋放，count 為回傳的實際數量。
 // iteration_i 表示當前迭代次數，iteration_n 表示總迭代次數。
 typedef DBList *(*RecommandPostsFunc)(
     DBList *ptags,
     DBList *popular_ptags,
-    size_t limit,
+    size_t count,
     size_t iteration_i,
     size_t iteration_n);
 
@@ -81,12 +87,12 @@ UserFeedback *get_user_feedback(const char *user_id, DBList *post_ids);
 // 回傳的 Hash 中，key 為貼文 ID，value 為總獲贊數。
 UserFeedback *get_popular_feedback(DBList *post_ids);
 
-DBList *get_posts_by_ptags(DBList *ptags, size_t limit);
+DBList *get_posts_by_ptags(DBList *ptags, size_t count);
 
 DBList *basic_recommand_posts(
     DBList *ptags,
     DBList *popular_ptags,
-    size_t limit,
+    size_t count,
     size_t iteration_i,
     size_t iteration_n);
 

@@ -12,14 +12,19 @@
 #include "database.h"
 #include "social_network.h"
 
-#define TOTAL_USERS 5
-#define TOTAL_POSTS 10000
-#define BASIC_AGG_OLD_RATE (double)0.75
-#define BASIC_AGG_NEW_RATE (double)0.25
-
 static inline double drand()
 {
   return (double)rand() / (double)RAND_MAX;
+}
+
+static size_t count_posts_with_weight(size_t posts_count, double weight)
+{
+  size_t count = (size_t)round((double)posts_count * weight);
+  if (count)
+    return count;
+  if (drand() < 0.5)
+    return ceil((double)posts_count * weight);
+  return 0;
 }
 
 static bool starts_with(const char *str, const char *prefix)
@@ -195,7 +200,7 @@ void init_social_network(void)
       {
         const char *tag_name = tag_name_node->data->value.string;
         const char *tag_id = hget(tag_id_dict, tag_name, NULL)->data->value.string;
-        const double tag_weight = drand(); // 計算使用者此 atag 的權重
+        const double tag_weight = ceil((double)(rand() % 1000000)) / (double)1000000; // 計算使用者此 atag 的權重
         TagWithWeight *tag_with_w = create_tag_with_weight(tag_id, tag_weight);
         const char *atag_string = serialize_tag_with_weight(tag_with_w);
         rpush(user_atags, create_dblistnode_with_string(atag_string));
@@ -347,6 +352,7 @@ UserFeedback *create_user_feedback(
   feedback->users_count = users_count;
   feedback->likes_count = likes_count;
   feedback->posts_count = posts_count;
+  feedback->likes_rate = (double)likes_count / (double)posts_count;
 
   return feedback;
 }
@@ -434,7 +440,7 @@ UserFeedback *get_popular_feedback(DBList *post_ids)
 
   DBList *user_ids = get_user_ids();
   DBHash *users_likes_dict = ht_create();
-  UserFeedback *popular_feedback = create_user_feedback(users_likes_dict, user_ids->length, 0, post_ids->length);
+  size_t likes_count = 0;
 
   DBListNode *user_id_node = user_ids->head;
   while (user_id_node)
@@ -454,22 +460,22 @@ UserFeedback *get_popular_feedback(DBList *post_ids)
       post_id_node = post_id_node->next;
     }
 
-    popular_feedback->likes_count += feedback->likes_count;
+    likes_count += feedback->likes_count;
     free_user_feedback(feedback);
     user_id_node = user_id_node->next;
   }
 
+  UserFeedback *feedback = create_user_feedback(users_likes_dict, user_ids->length, likes_count, post_ids->length);
+
   free_dblist(user_ids);
 
   if (!pass_posts)
-  {
     free_dblist(post_ids);
-  }
 
-  return popular_feedback;
+  return feedback;
 }
 
-DBList *get_posts_by_ptags(DBList *ptags, size_t limit)
+DBList *get_posts_by_ptags(DBList *ptags, size_t count)
 {
   DBList *posts = create_dblist();
   DBList *ptags_duplicated = create_dblist();
@@ -484,7 +490,7 @@ DBList *get_posts_by_ptags(DBList *ptags, size_t limit)
   while (ptag_node)
   {
     TagWithWeight *tag_with_w = parse_tag_with_weight(ptag_node->data->value.string);
-    size_t post_count = (size_t)(limit * tag_with_w->weight);
+    size_t post_count = count_posts_with_weight(count, tag_with_w->weight);
     DBList *post_ids = get_posts_by_tag(tag_with_w->id, post_count);
     DBListNode *post_id_node = post_ids->head;
     while (post_id_node)
@@ -503,27 +509,31 @@ DBList *get_posts_by_ptags(DBList *ptags, size_t limit)
 DBList *basic_recommand_posts(
     DBList *ptags,
     DBList *popular_ptags,
-    size_t limit,
+    size_t count,
     size_t iteration_i,
     size_t iteration_n)
 {
   double iteration_rate = (double)iteration_i / (double)(iteration_n - 1);
-  double base_weight = pow(iteration_rate, BASE_WEIGHT_EXP);
+  double base_weight = pow(iteration_rate, RCM_BASE_WEIGHT_EXP);
   if (base_weight > 1.0)
     base_weight = 1.0;
   double test_weight = 1.0 - base_weight;
-  size_t base_part_limit = (size_t)((double)limit * base_weight);
-  size_t test_part_limit = (size_t)((double)limit * test_weight);
-  DBList *base_part = get_posts_by_ptags(ptags, base_part_limit);
-  DBList *test_part = get_posts_by_ptags(popular_ptags, test_part_limit);
+
+  size_t base_part_count = count_posts_with_weight(count, base_weight);
+  size_t test_part_count = count_posts_with_weight(count, test_weight);
+
+  DBList *base_part = get_posts_by_ptags(ptags, base_part_count);
+  DBList *test_part = get_posts_by_ptags(popular_ptags, test_part_count);
   DBListNode *test_part_node = lpop(test_part);
+
   while (test_part_node)
   {
     rpush(base_part, test_part_node);
     test_part_node = lpop(test_part);
   }
+
   free_dblist(test_part);
-  return get_posts_by_ptags(ptags, limit);
+  return get_posts_by_ptags(ptags, count);
 }
 
 void basic_aggregate_func(
@@ -532,6 +542,12 @@ void basic_aggregate_func(
     size_t iteration_i,
     size_t iteration_n)
 {
+  double iteration_rate = (double)iteration_i / (double)(iteration_n - 1);
+  double old_weight_rate = 0.75 * pow(iteration_rate, 0.5) + 0.25;
+  if (old_weight_rate > 1.0)
+    old_weight_rate = 1.0;
+  double new_weight_rate = 1.0 - old_weight_rate;
+
   DBListNode *offset_ptag_node = user_feedback->ptags->head;
 
   while (offset_ptag_node)
@@ -544,7 +560,7 @@ void basic_aggregate_func(
       if (starts_with(curr_ptag_node->data->value.string, offset_ptag_with_w->id))
       {
         TagWithWeight *curr_ptag_with_w = parse_tag_with_weight(curr_ptag_node->data->value.string);
-        curr_ptag_with_w->weight = (curr_ptag_with_w->weight * BASIC_AGG_OLD_RATE) + (offset_ptag_with_w->weight * BASIC_AGG_NEW_RATE);
+        curr_ptag_with_w->weight = (curr_ptag_with_w->weight * old_weight_rate) + (offset_ptag_with_w->weight * new_weight_rate);
         char *serialized_ptag = serialize_tag_with_weight(curr_ptag_with_w);
         free(curr_ptag_node->data->value.string);
         curr_ptag_node->data->value.string = serialized_ptag;
@@ -573,7 +589,7 @@ void run_simulations(
     DBListNode *tag_id_node = popular_ptags->head;
     while (tag_id_node)
     {
-      char *serialized_tag = tag_id_node->data->value.string;
+      const char *serialized_tag = tag_id_node->data->value.string;
       rpush(used_popular_ptags, create_dblistnode_with_string(serialized_tag));
       tag_id_node = tag_id_node->next;
     }
@@ -601,12 +617,12 @@ void run_simulations(
 
   const size_t n = iteration_count;
   DBList *user_ids = get_user_ids();
+  const size_t users_count = user_ids->length;
 
-  // TODO: 每一輪 simulation 完成後，計算演算法評分
-  double like_rate = 0;
+  printf("start simulations\n");
   for (size_t i = 0; i < n; ++i)
   {
-    printf("run simulation (%lu/%lu)\n", i + 1, n);
+    double total_likes_rate = 0.0;
     DBListNode *user_id_node = user_ids->head;
     while (user_id_node)
     {
@@ -615,11 +631,38 @@ void run_simulations(
       DBList *post_ids = recommanded_posts_func(user_ptags, used_popular_ptags, posts_recommanded_per_round, i, n);
       UserFeedback *feedback = get_user_feedback(user_id, post_ids);
       aggregate_func(user_ptags, feedback, i, n);
+      total_likes_rate += feedback->likes_rate;
       set_user_ptags(user_id, user_ptags);
+      free_dblist(user_ptags);
       free_dblist(post_ids);
       free_user_feedback(feedback);
       user_id_node = user_id_node->next;
     }
+    printf("run simulation (%lu/%lu) likes=%d%%\n", i + 1, n, (int)((double)100 * (total_likes_rate / (double)users_count)));
+  }
+
+  // clean ptags
+  DBListNode *user_id_node = user_ids->head;
+  while (user_id_node)
+  {
+    const char *user_id = user_id_node->data->value.string;
+    DBList *user_ptags = get_user_ptags(user_id);
+    DBList *filtered_user_ptags = create_dblist();
+    DBListNode *ptag_node = lpop(user_ptags);
+    while (ptag_node)
+    {
+      TagWithWeight *tag_with_w = parse_tag_with_weight(ptag_node->data->value.string);
+      if (tag_with_w->weight < CLEAN_PTAG_THRESHOLD)
+        free_dblistnode(ptag_node);
+      else
+        rpush(filtered_user_ptags, ptag_node);
+      free_tag_with_weight(tag_with_w);
+      ptag_node = lpop(user_ptags);
+    }
+    set_user_ptags(user_id, filtered_user_ptags);
+    free_dblist(user_ptags);
+    free_dblist(filtered_user_ptags);
+    user_id_node = user_id_node->next;
   }
 
   popular_id = create_user_with_id_returned(POPULAR_USER_NAME, used_popular_ptags);
