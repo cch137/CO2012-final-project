@@ -90,6 +90,8 @@ function detect_entry_points {
     echo "Detected files with main function: ${prioritized_files[*]}"
     echo ""
     entry_point_options=(${prioritized_files[@]})
+
+    ENTRY_POINT=("${entry_point_options[0]}")
 }
 
 function clear_and_echo_banner {
@@ -102,7 +104,6 @@ function clear_and_echo_banner {
 
 # Function to display the selection menu with arrow keys
 function select_entry_point {
-    detect_entry_points
     local selected=0
 
     while true; do
@@ -182,6 +183,7 @@ function compile_and_run {
         # Run the program in the background, redirecting stdin
         ./$OUTPUT_EXECUTABLE < /dev/tty &
         current_pid=$!
+        ps -p "$current_pid" > /dev/null 2>&1
     else
         echo -e "\n\e[41;37mCompilation failed. Skipping execution.\e[0m\n"
     fi
@@ -290,11 +292,17 @@ function main_menu {
 # Check if inotify-tools is installed
 check_inotify
 
-# Handle exit to clean up background processes
-trap "kill $current_pid 2>/dev/null; pkill -P $$" EXIT
+detect_entry_points
 
-# Start monitoring the script in the background
-monitor_script &
+if [[ " $@ " == *" -build "* ]]; then
+    build_only
+else
+    # Handle exit to clean up background processes
+    trap "kill $current_pid 2>/dev/null; pkill -P $$" EXIT
 
-# Display the main menu
-main_menu
+    # Start monitoring the script in the background
+    monitor_script &
+
+    # Display the main menu
+    main_menu
+fi
