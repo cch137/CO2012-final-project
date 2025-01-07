@@ -4,9 +4,11 @@
 // https://zh.wikipedia.org/zh-tw/%E6%BF%80%E6%B4%BB%E5%87%BD%E6%95%B0
 // https://docs.google.com/document/d/1IQn-drdI7MEJm8X1O7h2gmDl1pjV78Kul_Yg95b6mL0/edit?tab=t.0
 
-double default_recommand_algo(double x);
-
-double default_aggregate_algo(double x);
+double r_algo0(double x);
+double r_algo1(double x);
+double r_algo2(double x);
+double a_algo0(double x);
+double a_algo1(double x);
 
 // selu與relu的混和，分段，將大的線性變大，小的指數變小
 double s_selu(double input);

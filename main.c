@@ -16,16 +16,13 @@ int main()
   printf("calculated popular tags\n");
 
   init_users_ptags(NULL);
+
   run_simulations(
       20, 20,
-      default_recommand_algo,
-      default_aggregate_algo,
+      r_algo0,
+      a_algo0,
       NULL);
-  run_simulations(
-      20, 20,
-      default_recommand_algo,
-      default_aggregate_algo,
-      NULL);
+
   printf("simulations done\n");
 
   delete_posts();

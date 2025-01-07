@@ -24,14 +24,34 @@
 // 1.33/1 = 0.25
 #define CURVE_BEGIN 0.5
 
-double default_recommand_algo(double x)
+// y = x^2
+double r_algo0(double x)
 {
   return pow(x, 2.0);
 }
 
-double default_aggregate_algo(double x)
+// y = 0.5*x^2
+double r_algo1(double x)
+{
+  return pow(0.5 * x, 2.0);
+}
+
+// y = 0.5 + 0.5*x^2
+double r_algo2(double x)
+{
+  return pow(0.5 * x, 2.0);
+}
+
+// y = 0.75*x^0.5 + 0.25
+double a_algo0(double x)
 {
   return 0.75 * pow(x, 0.5) + 0.25;
+}
+
+// y = 4 (x-0.5)^(3) + 0.5
+double a_algo1(double x)
+{
+  return 4.0 * pow(x - 0.5, 3.0) + 0.5;
 }
 
 // 將大於SELU_TO_LESS的值放大alpha倍
