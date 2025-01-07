@@ -521,6 +521,7 @@ static DBList *recommand_posts(
   return recommanded_posts;
 }
 
+#include "db/interaction.h"
 static void aggregate_ptags(
     DBList *current_ptags,
     UserFeedback *user_feedback,
@@ -556,6 +557,13 @@ static void aggregate_ptags(
       }
       free_tag_w(curr_ptag_with_w);
       curr_ptag_node = curr_ptag_node->next;
+    }
+    if (!found)
+    {
+      offset_ptag_with_w->weight *= new_weight_rate;
+      char *serialized_ptag = serialize_tag_w(offset_ptag_with_w);
+      rpush(current_ptags, create_dblistnode_with_string(serialized_ptag));
+      free(serialized_ptag);
     }
     free_tag_w(offset_ptag_with_w);
     offset_ptag_node = offset_ptag_node->next;
