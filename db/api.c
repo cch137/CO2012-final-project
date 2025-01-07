@@ -564,7 +564,7 @@ db_uint_t dbapi_hdel(const char *key, const char *field)
 
 db_int_t dbapi_hincrby(const char *key, const char *field, db_int_t value)
 {
-  DBRequest *request = create_request(DB_HDEL);
+  DBRequest *request = create_request(DB_HINCRBY);
   add_request_arg(request, dbobj_create_string_with_dup(key));
   add_request_arg(request, dbobj_create_string_with_dup(field));
   add_request_arg(request, dbobj_create_int(value));
@@ -589,6 +589,23 @@ DBList *dbapi_keys()
   {
     free_reply(reply);
     return NULL;
+  }
+  DBList *result = reply->data->value.list;
+  reply->data->value.list = NULL;
+  free_reply(reply);
+  return result;
+}
+
+DBList *dbapi_match_keys(const char *pattern)
+{
+  DBRequest *request = create_request(DB_MATCH_KEYS);
+  add_request_arg(request, dbobj_create_string_with_dup(pattern));
+  DBReply *reply = dbapi_request_sync(request);
+  free_request(request);
+  if (reply_is_error(reply))
+  {
+    free_reply(reply);
+    return 0;
   }
   DBList *result = reply->data->value.list;
   reply->data->value.list = NULL;

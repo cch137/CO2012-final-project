@@ -17,31 +17,10 @@
 #define POST_NS "post"
 #define TAG_NS "tag"
 #define INDEX_NS "index"
-#define USER_NS_PREFIX "user:"
-#define POST_NS_PREFIX "post:"
-#define TAG_NS_PREFIX "tag:"
-#define INDEX_NS_PREFIX "index:"
 #define NAME_FIELD_NAME "name"
 #define TAGS_FIELD_NAME "tags"
-#define NAME_FIELD_SUFFIX ":name"
-#define TAGS_FIELD_SUFFIX ":tags"
 #define ATAGS_FIELD_NAME "atags"
 #define PTAGS_FIELD_NAME "ptags"
-
-static bool starts_with(const char *str, const char *prefix)
-{
-  size_t prefix_len = strlen(prefix);
-  return strncmp(str, prefix, prefix_len) == 0;
-}
-
-static bool ends_with(const char *str, const char *suffix)
-{
-  size_t str_len = strlen(str);
-  size_t suffix_len = strlen(suffix);
-  if (suffix_len > str_len)
-    return false;
-  return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
-}
 
 static char *generate_oid()
 {
@@ -114,39 +93,30 @@ static char *parse_oid(const char *query_key)
   return oid;
 }
 
-static DBList *get_namespace_ids(const char *ns_prefix, const char *suffix)
+static DBList *convert_to_ids(DBList *keys)
 {
-  DBList *list = dbapi_keys();
-  DBList *filtered = create_dblist();
-  DBListNode *curr = list->head;
-
+  DBListNode *curr = keys->head;
   while (curr)
   {
-    if (!dbobj_is_string(curr->data))
-      continue;
-    const char *key = curr->data->value.string;
-    if (starts_with(key, ns_prefix) && ends_with(key, suffix))
-    {
-      char *oid = parse_oid(key);
-      rpush(filtered, create_dblistnode_with_string(oid));
-      free(oid);
-    }
+    char *id = parse_oid(curr->data->value.string);
+    free(curr->data->value.string);
+    curr->data->value.string = id;
     curr = curr->next;
   }
-
-  free_dblist(list);
-
-  return filtered;
-};
+  return keys;
+}
 
 static char *create_query_key(const char *namespace, const char *id, const char *field_name)
 {
   // 3 = 2 * strlen(":") + 1;
-  const size_t key_length = strlen(namespace) + strlen(id) + (field_name ? strlen(field_name) : 0) + 3;
+  const size_t key_length = strlen(namespace) + strlen(id) + (field_name ? (strlen(field_name) + 1) : 0) + 3;
   char *key = (char *)malloc(key_length);
   if (!key)
     EXIT_ON_MEMORY_ERROR();
-  snprintf(key, key_length, "%s:%s:%s", namespace, id, field_name ? field_name : "");
+  if (field_name)
+    snprintf(key, key_length, "%s:%s:%s", namespace, id, field_name);
+  else
+    snprintf(key, key_length, "%s:%s", namespace, id);
   return key;
 }
 
@@ -163,7 +133,10 @@ static void db_set_list(const char *key, DBList *list)
 
 DBList *get_user_ids()
 {
-  return get_namespace_ids(USER_NS_PREFIX, NAME_FIELD_SUFFIX);
+  char *pattern = create_query_key(USER_NS, "*", NULL);
+  DBList *keys = dbapi_match_keys(pattern);
+  free(pattern);
+  return convert_to_ids(keys);
 };
 
 char *create_user_with_id_returned(const char *name, DBList *atags)
@@ -228,7 +201,10 @@ void delete_user(const char *oid)
 
 DBList *get_post_ids()
 {
-  return get_namespace_ids(POST_NS_PREFIX, TAGS_FIELD_SUFFIX);
+  char *pattern = create_query_key(POST_NS, "*", NULL);
+  DBList *keys = dbapi_match_keys(pattern);
+  free(pattern);
+  return convert_to_ids(keys);
 }
 
 char *create_post_with_id_returned(DBList *tags)
@@ -266,18 +242,21 @@ void create_post_indexes()
 
 void delete_posts()
 {
-  DBList *list = dbapi_keys();
-  DBListNode *curr = list->head;
-
+  char *pattern = create_query_key(POST_NS, "*", NULL);
+  DBList *keys = dbapi_match_keys(pattern);
+  free(pattern);
+  DBListNode *curr = keys->head;
   while (curr)
-  {
-    const char *key = curr->data->value.string;
-    if (starts_with(key, POST_NS_PREFIX) || starts_with(key, INDEX_NS_PREFIX))
-      dbapi_del(key);
-    curr = curr->next;
-  }
+    dbapi_del(curr->data->value.string), curr = curr->next;
+  free_dblist(keys);
 
-  free_dblist(list);
+  pattern = create_query_key(INDEX_NS, "*", NULL);
+  keys = dbapi_match_keys(pattern);
+  free(pattern);
+  curr = keys->head;
+  while (curr)
+    dbapi_del(curr->data->value.string), curr = curr->next;
+  free_dblist(keys);
 }
 
 DBList *get_post_tags(const char *post_id)
@@ -328,7 +307,11 @@ DBList *get_posts_by_tag(const char *tag_id, size_t limit, const bool by_index)
 
 DBList *get_tag_ids()
 {
-  return get_namespace_ids(TAG_NS_PREFIX, NAME_FIELD_SUFFIX);
+  char *pattern = create_query_key(TAG_NS, "*", NULL);
+  DBList *keys = dbapi_match_keys(pattern);
+  free(pattern);
+
+  return convert_to_ids(keys);
 }
 
 char *create_tag_with_id_returned(const char *name)

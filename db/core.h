@@ -69,6 +69,8 @@ void db_expire(DBRequest *request, DBReply *reply);
 
 void db_keys(DBRequest *request, DBReply *reply);
 
+void db_match_keys(DBRequest *request, DBReply *reply);
+
 // Stops the database and saves data to a specified file
 void db_shutdown(DBRequest *request, DBReply *reply);
 

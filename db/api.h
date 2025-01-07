@@ -32,6 +32,7 @@ db_uint_t dbapi_hset(const char *key, const char *field, const char *value);
 db_uint_t dbapi_hdel(const char *key, const char *field);
 db_int_t dbapi_hincrby(const char *key, const char *field, db_int_t value);
 DBList *dbapi_keys();
+DBList *dbapi_match_keys(const char *pattern);
 db_bool_t dbapi_shutdown();
 db_bool_t dbapi_save();
 db_bool_t dbapi_flushall();

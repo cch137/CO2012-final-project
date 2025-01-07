@@ -296,6 +296,9 @@ static int core_worker()
         case DB_KEYS:
           db_keys(request, reply);
           break;
+        case DB_MATCH_KEYS:
+          db_match_keys(request, reply);
+          break;
         case DB_FLUSHALL:
           db_flushall(request, reply);
           break;
@@ -839,6 +842,21 @@ void db_expire(DBRequest *request, DBReply *reply)
 void db_keys(DBRequest *request, DBReply *reply)
 {
   reply_data(reply, dbobj_create_list(ht_keys(main_ht, expr_ht)));
+}
+
+void db_match_keys(DBRequest *request, DBReply *reply)
+{
+  DBListNode *curr_arg_node = get_arg_head_node(request);
+  char *pattern = get_string_arg(curr_arg_node);
+  curr_arg_node = curr_arg_node ? curr_arg_node->next : NULL;
+
+  if (!pattern || curr_arg_node)
+  {
+    reply_error(reply, DB_ERR_ARG_ERROR);
+    return;
+  }
+
+  reply_data(reply, dbobj_create_list(ht_match_keys(main_ht, pattern, expr_ht)));
 }
 
 void db_shutdown(DBRequest *request, DBReply *reply)

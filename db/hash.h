@@ -43,3 +43,5 @@ db_bool_t ht_has(DBHash *ht, const char *key, DBHash *expires_ht);
 db_bool_t ht_rename(DBHash *ht, const char *old_key, const char *new_key, DBHash *expires_ht);
 
 DBList *ht_keys(DBHash *ht, DBHash *expires_ht);
+
+DBList *ht_match_keys(DBHash *ht, const char *pattern, DBHash *expires_ht);

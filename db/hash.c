@@ -567,3 +567,45 @@ DBList *ht_keys(DBHash *ht, DBHash *expires_ht)
 
   return key_list;
 }
+
+#include <stdio.h>
+DBList *ht_match_keys(DBHash *ht, const char *pattern, DBHash *expires_ht)
+{
+  if (!ht)
+    return NULL;
+
+  DBHashEntry *entry;
+  db_uint_t bucket_index;
+  DBList *key_list = create_dblist();
+  time_t now = time(NULL);
+
+  if (ht->buckets0)
+  {
+    for (bucket_index = 0; bucket_index < ht->size0; ++bucket_index)
+    {
+      entry = ht->buckets0[bucket_index];
+      while (entry)
+      {
+        if (!ht_is_expire(expires_ht, entry->key) && dbutil_match_keys(entry->key, pattern))
+          rpush(key_list, create_dblistnode_with_string(entry->key));
+        entry = entry->next;
+      }
+    }
+  }
+
+  if (ht->buckets1)
+  {
+    for (bucket_index = 0; bucket_index < ht->size1; ++bucket_index)
+    {
+      entry = ht->buckets1[bucket_index];
+      while (entry)
+      {
+        if (!ht_is_expire(expires_ht, entry->key) && dbutil_match_keys(entry->key, pattern))
+          rpush(key_list, create_dblistnode_with_string(entry->key));
+        entry = entry->next;
+      }
+    }
+  }
+
+  return key_list;
+}
