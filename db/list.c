@@ -2,6 +2,20 @@
 #include "obj.h"
 #include "list.h"
 
+DBList *duplicate_string_dblist(DBList *list)
+{
+  if (!list)
+    return NULL;
+  DBList *duplicated = create_dblist();
+  DBListNode *node = list->head;
+  while (node)
+  {
+    rpush(duplicated, create_dblistnode_with_string(node->data->value.string));
+    node = node->next;
+  }
+  return duplicated;
+}
+
 DBListNode *create_dblistnode(DBObj *data)
 {
   DBListNode *node = malloc(sizeof(DBListNode));

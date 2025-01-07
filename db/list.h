@@ -7,6 +7,8 @@
 void join_dblistnodes(DBListNode *left_node, DBListNode *right_node);
 void break_dblistnodes(DBListNode *left_node, DBListNode *right_node);
 
+DBList *duplicate_string_dblist(DBList *list);
+
 DBListNode *create_dblistnode(DBObj *data);
 
 // Creates a new node for a doubly linked list with specified data
