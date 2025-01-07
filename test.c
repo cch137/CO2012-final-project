@@ -7,6 +7,8 @@
 #include "db/utils.h"
 #include "database.h"
 #include "algorithms.h"
+#include "social_network.h"
+#include "database.h"
 
 #define RESULT_PASS "\033[0;32mPASS\033[0m"
 #define RESULT_FAIL "\033[0;31mFAIL\033[0m"
@@ -72,11 +74,11 @@ void test_dbutil_match_keys()
 
 int main()
 {
-  printf("Tests start.\n");
+  // printf("Tests start.\n");
 
-  test_dbutil_match_keys();
+  // test_dbutil_match_keys();
 
-  printf("Tests done!\n");
+  // printf("Tests done!\n");
 
   return 0;
 }

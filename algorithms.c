@@ -48,7 +48,7 @@ DBList *generate_personality(DBHash *likes_dict)
       if (strcmp(string->id, a->head->data->value.string) == 0)
       {
         post_count++;
-        liked_count += (strcmp(hget(likes_dict, post_node->data->value.string, NULL)->data->value.string, "0") == 0) ? 1 : 0;
+        liked_count += (strcmp(hget(likes_dict, post_node->data->value.string, NULL)->data->value.string, "1") == 0) ? 1 : 0;
       }
       post_node = post_node->next;
       free(a);

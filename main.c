@@ -12,14 +12,20 @@ int main()
   init_social_network();
   printf("social network inited\n");
 
-  UserFeedback *popular_feedback = simulate_popular_feedback(NULL);
+  UserFeedback *popular_feedback = collect_popular_feedback(NULL);
   printf("calculated popular tags\n");
 
+  init_users_ptags(NULL);
   run_simulations(
-      true, 10, 20,
-      basic_recommand_posts,
-      basic_aggregate_func,
-      popular_feedback->ptags);
+      20, 20,
+      default_recommand_algo,
+      default_aggregate_algo,
+      NULL);
+  run_simulations(
+      20, 20,
+      default_recommand_algo,
+      default_aggregate_algo,
+      NULL);
   printf("simulations done\n");
 
   delete_posts();
