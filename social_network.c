@@ -478,16 +478,6 @@ DBList *get_posts_by_ptags(DBList *ptags, size_t count)
   return posts;
 }
 
-double default_recommand_algo(double x)
-{
-  return pow(x, 2.0);
-}
-
-double default_aggregate_algo(double x)
-{
-  return 0.75 * pow(x, 0.5) + 0.25;
-}
-
 static DBList *recommand_posts(
     DBList *ptags,
     DBList *popular_ptags,

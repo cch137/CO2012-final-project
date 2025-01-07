@@ -85,10 +85,6 @@ UserFeedback *collect_popular_feedback(DBList *post_ids);
 
 DBList *get_posts_by_ptags(DBList *ptags, size_t count);
 
-double default_recommand_algo(double x);
-
-double default_aggregate_algo(double x);
-
 // 執行模擬流程
 // 為每位使用者推薦指定數量 (posts_recommanded_per_round) 的貼文，並進行指定次數的迭代 (iteration_count)。
 // 透過傳入的 recommanded_posts_func 和 aggregate_func 實現推薦與標籤更新邏輯。
