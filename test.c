@@ -58,7 +58,7 @@ void test_dbutil_match_keys()
       {"hello", "h*llo", true},
       {"heeeello", "h*llo", true},
       {"hey", "h*llo", false},
-  };
+      {".46/", "vdf4/.", true}};
 
   size_t test_count = sizeof(test_cases) / sizeof(TestCase);
 
