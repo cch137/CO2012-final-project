@@ -11,11 +11,15 @@ WATCH_PATTERN='^(\./)?([^.][^/]*/)*[^.][^/]*\.(c|cpp|h)$'     # Updated pattern 
 OUTPUT_EXECUTABLE="main"       # Name of the output executable
 ENTRY_POINT="main"             # Default entry point
 
-# Files to ignore during compilation and monitoring
-if [ -z "${IGNORE_FILES+x}" ]; then
-    local default_options=()
-    IGNORE_FILES=("${default_options[@]}")
-fi
+function init_ignore_file {
+    # Files to ignore during compilation and monitoring
+    if [ -z "${IGNORE_FILES+x}" ]; then
+        local default_options=()
+        IGNORE_FILES=("${default_options[@]}")
+    fi
+}
+
+init_ignore_file
 
 # Function to check and install inotify-tools if necessary
 function check_inotify {
