@@ -18,38 +18,17 @@
 #define SIGMOID_K 8
 #define SIGMOID_MID 0.5
 
-// 小於RELU_CUT的權重直接變0
-#define RELU_CUT 0.01
-
 // 1.33/1 = 0.25
 #define CURVE_BEGIN 0.5
 
-// y = x^2
-double r_algo0(double x)
-{
-  return pow(x, 2.0);
-}
-
-// y = 0.5*x^2
-double r_algo1(double x)
-{
-  return pow(0.5 * x, 2.0);
-}
-
-// y = 0.5 + 0.5*x^2
-double r_algo2(double x)
-{
-  return pow(0.5 * x, 2.0);
-}
-
 // y = 0.75*x^0.5 + 0.25
-double a_algo0(double x)
+double s_075_025(double x)
 {
   return 0.75 * pow(x, 0.5) + 0.25;
 }
 
 // y = 4 (x-0.5)^(3) + 0.5
-double a_algo1(double x)
+double s_cube(double x)
 {
   return 4.0 * pow(x - 0.5, 3.0) + 0.5;
 }
@@ -97,10 +76,21 @@ double s_d_sigmoid(double input)
   return normalized * normalized;
 }
 
-// 小於RELU_CUT的就為0
-double s_relu(double input)
+// sin猜測會比較好的
+double s_create(double input)
 {
-  return input > RELU_CUT ? input : 0;
+  if (input < 0.3)
+  {
+    return (-2) * input + 1;
+  }
+  else if (input < 0.7)
+  {
+    return s_create(0.7);
+  }
+  else
+  {
+    return 2 * (input)-1;
+  }
 }
 
 // 回傳input平方，希望讓大的放大，小的縮小

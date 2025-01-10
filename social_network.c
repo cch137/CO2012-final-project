@@ -613,7 +613,11 @@ void run_simulations(
   DBList *user_ids = get_user_ids();
   const size_t users_count = user_ids->length;
 
-  printf("start simulations\n");
+  // printf("start simulations\n");
+  double average_likes_rate = 0;
+  double start_likes_rate = 0;
+  double end_likes_rate = 0;
+  DBList *likes_rates = create_dblist();
   for (size_t i = 0; i < n; ++i)
   {
     double total_likes_rate = 0.0;
@@ -632,8 +636,56 @@ void run_simulations(
       free_user_feedback(feedback);
       user_id_node = user_id_node->next;
     }
-    printf("run simulation (%lu/%lu) likes=%d%%\n", i + 1, n, (int)((double)100 * (total_likes_rate / (double)users_count)));
+    double likes_rate = total_likes_rate / (double)users_count;
+    if (i == 0)
+    {
+      start_likes_rate = likes_rate;
+    }
+    else if (i == n - 1)
+    {
+      end_likes_rate = likes_rate;
+    }
+    rpush(likes_rates, create_dblistnode(dbobj_create_double(likes_rate)));
+    // printf("run simulation (%lu/%lu) likes=%d%%\n", i + 1, n, (int)((double)100 * (total_likes_rate / (double)users_count)));
+
+    // clean ptags
+    DBListNode *user_id_node1 = user_ids->head;
+    while (user_id_node1)
+    {
+      const char *user_id = user_id_node1->data->value.string;
+      DBList *user_ptags = get_user_ptags(user_id);
+      DBList *filtered_user_ptags = create_dblist();
+      DBListNode *ptag_node = lpop(user_ptags);
+      while (ptag_node)
+      {
+        TagWithWeight *tag_with_w = parse_tag_w(ptag_node->data->value.string);
+        if (tag_with_w->weight < CLEAN_PTAG_THRESHOLD)
+          free_dblistnode(ptag_node);
+        else
+          rpush(filtered_user_ptags, ptag_node);
+        free_tag_w(tag_with_w);
+        ptag_node = lpop(user_ptags);
+      }
+      set_user_ptags(user_id, filtered_user_ptags);
+      free_dblist(user_ptags);
+      free_dblist(filtered_user_ptags);
+      user_id_node1 = user_id_node1->next;
+    }
+    save_db();
+    system("python analysis.py");
   }
+  // calculate average likes rate
+  DBListNode *likes_rate_node = likes_rates->head;
+  while (likes_rate_node)
+  {
+    average_likes_rate += likes_rate_node->data->value.double_value;
+    likes_rate_node = likes_rate_node->next;
+  }
+  average_likes_rate /= n;
+  // printf("%lf\n", start_likes_rate);
+  // printf("%lf\n", end_likes_rate);
+  // printf("%lf\n", average_likes_rate);
+  free_dblist(likes_rates);
 
   // clean ptags
   DBListNode *user_id_node = user_ids->head;

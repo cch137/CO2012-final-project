@@ -35,6 +35,13 @@ typedef struct
   double weight;
 } TagWithWeight;
 
+typedef struct
+{
+  double average_likes_rate;
+  double start_likes_rate;
+  double end_likes_rate;
+} SimulationResult;
+
 // 就只是create
 TagWithWeight *create_tag_w(const char *tag_id, double weight);
 // 用完tag_with_weight記得要free喔
