@@ -85,5 +85,4 @@ def calculate_tag_accuracy(file_path):
 
 
 accuracy = 1 - calculate_tag_accuracy("analysis.json")
-# print("accuracy:")
-print(f"{accuracy}")
+print(f"ptags_accuracy={round(accuracy*100)}%")
